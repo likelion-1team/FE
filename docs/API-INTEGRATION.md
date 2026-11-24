@@ -1,5 +1,17 @@
 # API 통합 기록
 
+## 프로덕션 재배포 — 2026-11-25
+
+- 공개 주소: https://likelion-1team-fe.vercel.app
+- 배포 코드: `f5f3ba5` · 브랜치 `codex/fe-current-api-contract` · 초안 PR [#3](https://github.com/likelion-1team/FE/pull/3), 대상 `codex/fe-redteam-hardening`.
+- Vercel 배포: `dpl_2bw2N5JhQystx4FWzx9FxHCrSFco`, 06:45 KST 생성, production Ready 및 공개 도메인 alias 확인. Git 자동 배포는 연결하지 않았습니다.
+- 빌드 설정: `VITE_API_BASE_URL=/api/v1`, `VITE_AUTH_TRANSPORT=auto`, `VITE_EMAIL_CHECK_METHOD=GET`. 프로덕션 JS는 검증한 로컬 빌드와 바이트 단위로 일치했습니다.
+- lint·타입 검사·빌드 통과. 단위/컴포넌트 23개, Playwright 28개(신규 계약 시나리오 8개 포함), 합계 51개 통과. 브라우저 업무 테스트는 모의 API입니다.
+- 실제 HTTPS OpenAPI의 필수 경로 13개와 기준 버전·selectionId·analysisId 관련 필드를 검사했습니다. 비인증 users/me는 401입니다.
+- 실제 Chrome의 공개 회원가입 화면에서 합성 이메일로 중복 확인 성공, 로그인 화면에서 존재하지 않는 합성 계정의 잘못된 자격 증명 안내를 확인했습니다. 화면 런타임 error 로그는 없었습니다. 계정은 만들지 않았습니다.
+- Vercel 경유에서 실제 FE Origin을 포함한 비존재 계정 로그인은 401 INVALID_CREDENTIALS였습니다. 실계정 쿠키 발급·갱신·팀 전환·업로드·분석 완료는 여전히 별도 검증이 필요합니다.
+- 화면 기록: 프로젝트 루트 `output/fe-current-contract-deployed.jpg`. main 병합은 수행하지 않았습니다.
+
 ## FE 계약 보완 — 2026-11-25
 
 아래 재확인에서 발견한 이메일 GET, 버전 기반 분석 기준, selectionId 후보 선택, analysisId 진행·항목 조회를 `codex/fe-current-api-contract`에서 반영했습니다. 이전 계약 설명은 날짜별 이력으로 남깁니다.
