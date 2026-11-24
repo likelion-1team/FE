@@ -1,5 +1,34 @@
 # API 통합 기록
 
+## FE 계약 보완 — 2026-11-25
+
+아래 재확인에서 발견한 이메일 GET, 버전 기반 분석 기준, selectionId 후보 선택, analysisId 진행·항목 조회를 `codex/fe-current-api-contract`에서 반영했습니다. 이전 계약 설명은 날짜별 이력으로 남깁니다.
+
+- 기준 저장은 expectedVersion과 단일 taskType의 성공·실패·판정 불가 조건을 전송합니다. 각 조건은 1~10줄·줄당 500자, 업무 이름은 200자까지이며 온보딩 시작일·대상 건수는 선택입니다. 버전 충돌 시 자동 덮어쓰지 않습니다.
+- 후보는 별도 GET에서 selectable·duplicateType·validationCode를 확인하고 1부터 시작하는 페이지·검색을 지원합니다. 선택 최대 건수·파일 보존 시간은 settings.policies를 사용합니다.
+- 분석은 settingsVersion과 selections[].selectionId/taskTypeId, Idempotency-Key를 전송하고 analysisId로 이동합니다. 같은 요청 재시도에는 캡처한 본문·멱등 키를 유지합니다. 지연된 수락 응답의 팀 전환 보호는 유지합니다.
+- 분석 진행은 서버 pollAfterSeconds를 1~30초 범위로 적용하며 종료·오류·화면 이탈 시 주기 조회를 중단합니다. 부분 성공·실패 항목·피드백 진입을 표시하고, 항목 목록도 페이지 조회합니다.
+- 업로드 CONSUMED는 분석 완료가 아닙니다. 이력 응답에 analysisId가 없으므로 새로고침 후 업로드만으로 상세 분석을 복원할 수 없습니다. 같은 세션의 접수 정보가 메모리에 남은 경우에만 연결합니다. 서버 후속: 이력에 analysisId 또는 상세 조회 링크 제공.
+- 목표·업무 결과·재작업 확인 API의 공개는 확인했으나 이번 FE 구현 범위에는 포함하지 않습니다. 신규 공유 승인은 계속 비활성입니다.
+
+## 재확인 — 2026-11-25
+
+이 절이 아래 2026-11-24의 배포 상태 기록보다 최신입니다. FE 재배포나 실계정 검증 완료를 의미하지 않습니다.
+
+- FE PR #1·#2는 모두 open·미병합이며 각 head는 `b998646`, `664e8a7` 그대로입니다. FE 작업 트리는 재확인 시작 시 깨끗했습니다.
+- 읽기용 BE 복제본을 `origin/develop`의 `25937d2`로 fast-forward했습니다. 이전 로컬 기준은 `15ccd2f`였습니다. 실행 중인 서버의 정확한 커밋은 공개 OpenAPI만으로 확정하지 않습니다.
+- 06:34 KST에 존재하지 않는 합성 이메일의 로그인 요청을 재검사했습니다. HTTPS 백엔드 직접 호출과 Vercel 경유 모두 **401 INVALID_CREDENTIALS**였습니다. 이전 로그인 500은 현재 재현되지 않으며, 과거 장애 원인은 서버 로그 없이 확정하지 않습니다. 비인증 `/users/me`도 양쪽 모두 401입니다.
+- 이메일 확인은 **GET 200**, 기존 POST는 **401 AUTH_REQUIRED**로 양쪽에서 확인됐습니다. 현재 배포 FE의 POST 설정은 변경된 서버와 맞지 않습니다.
+- 공개 OpenAPI에 목표 GET/PUT, 업로드 후보 GET, 분석 상태·항목 GET, 결과·재작업 확인 PUT이 추가됐습니다. 경로 공개는 인증 후 실제 저장·조회 성공의 증거가 아닙니다.
+- 분석 기준은 `taskTypes[]/successDefinition`에서 `version/taskType/successConditions/failureConditions/unknownConditions/policies` 구조로 변경됐습니다. 수정 요청에 `expectedVersion`이 필요합니다. 기존 FE의 설정 스키마·저장 요청은 호환되지 않습니다.
+- 분석 시작은 `settingsVersion`과 `selections[].selectionId/taskTypeId`를 받고 `analysisId`를 반환합니다. 분석 진행은 `/analyses/{analysisId}`, 항목 결과는 `/analyses/{analysisId}/items`로 확인합니다. 상태는 QUEUED/RUNNING/SUCCEEDED/PARTIALLY_SUCCEEDED/FAILED입니다. 업로드 상태에는 CONSUMED가 추가됐습니다. 기존 FE의 externalId 선택·uploadId 상태 흐름을 전환해야 합니다.
+- 로그인·갱신 공개 응답에서 refreshToken이 빠진 쿠키 계약이 확인됐습니다. FE auto 모드는 이를 지원하지만 Vercel 경유 쿠키 발급·갱신·로그아웃은 실계정 확인이 남아 있습니다.
+- 비식별 공유 미리보기·버전 승인, 활용 이벤트, 대화 삭제·삭제 작업 경로는 이번 OpenAPI에도 없습니다. 신규 공유 승인은 계속 비활성 상태를 유지해야 합니다.
+- OpenAPI `servers`는 HTTPS로 정렬됐습니다. 공통 `Item`/`TaskType` 이름 충돌은 여전히 DTO 대조가 필요합니다.
+- 사용자가 첨부한 서비스 흐름은 `/api` 접두사, uploadId 중심 상태 조회, boolean 공유 승인 등 과거 계약을 포함합니다. 실제 요청에는 `/api/v1`을 사용하고 위 변경을 반영해야 합니다. 링크된 Notion API 목록은 연결 도구에서 404로 조회되지 않아 하위 명세는 확인하지 못했습니다.
+
+실계정 로그인·팀 전환·업로드·분석은 아직 미검증입니다. 사용자는 기존 테스트 계정에 직접 로그인하는 방식을 선택했습니다. 이 재확인에서 계정·팀·분석 데이터는 생성하지 않았습니다.
+
 확인 기준: 2026-11-24 배포 OpenAPI와 BE `develop`의 DTO·컨트롤러. 개발 브랜치와 배포 서버의 변경 시점은 다를 수 있습니다. 이 문서는 실제 계정으로 모든 서버 기능을 검증했다는 의미가 아닙니다.
 
 ## Vercel 실배포 확인

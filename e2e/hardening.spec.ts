@@ -129,7 +129,15 @@ test('late analysis acceptance cannot navigate a newly selected team', async ({ 
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ data: { uploadId: 31, status: 'ANALYZING' } }),
+      body: JSON.stringify({
+        data: {
+          analysisId: 41,
+          uploadId: 31,
+          status: 'QUEUED',
+          selectedCount: 1,
+          pollAfterSeconds: 3,
+        },
+      }),
     })
   })
   await login(page)

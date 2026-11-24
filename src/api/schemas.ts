@@ -13,7 +13,7 @@ const nullableDate = z
   .transform((value) => value ?? null)
 const role = z.enum(['LEADER', 'MEMBER'])
 const reaction = z.enum(['HELPFUL', 'NOT_APPLICABLE'])
-const status = z.enum(['UPLOADED', 'ANALYZING', 'DONE', 'FAILED'])
+const status = z.enum(['UPLOADED', 'ANALYZING', 'DONE', 'FAILED', 'CONSUMED'])
 const example = z.object({ before: z.string(), after: z.string() })
 export const tokensSchema = z.object({
   accessToken: z.string().trim().min(1),
@@ -36,20 +36,28 @@ export const teamsSchema = z.array(
 )
 export const emailCheckSchema = z.object({ available: z.boolean() })
 export const settingsSchema = z.object({
-  taskTypes: z.array(
-    z.object({
-      id: id.optional(),
-      taskTypeId: id.optional(),
+  version: count,
+  taskType: z
+    .object({
+      taskTypeId: id,
       name: z.string(),
-      successDefinition: z.string(),
-    }),
-  ),
+      successConditions: z.array(z.string()),
+      failureConditions: z.array(z.string()),
+      unknownConditions: z.array(z.string()),
+    })
+    .nullable(),
   targetFrom: nullableDate,
   targetTo: nullableDate,
   onboardingStartDate: nullableDate,
   targetCount: nullableNumber,
-  minDailyConversations: count.optional(),
-  hourlyLaborCost: count.optional(),
+  policies: z.object({
+    policyVersion: count,
+    minSampleSize: count,
+    minTeamContributors: count,
+    minOutcomeConfirmationRate: z.number().min(0).max(1),
+    uploadRetentionMinutes: z.number().int().positive(),
+    maxSelectionsPerRequest: z.number().int().positive(),
+  }),
 })
 export const membersSchema = z.array(
   z.object({ userId: id, name: z.string(), email: z.string(), role, submitted: z.boolean() }),
@@ -107,7 +115,54 @@ export const uploadSchema = z.object({
     }),
   ),
 })
-export const analysisStartSchema = z.object({ uploadId: id, status })
+const runStatus = z.enum(['QUEUED', 'RUNNING', 'SUCCEEDED', 'PARTIALLY_SUCCEEDED', 'FAILED'])
+export const analysisStartSchema = z.object({
+  analysisId: id,
+  uploadId: id,
+  status: runStatus,
+  selectedCount: count,
+  pollAfterSeconds: z.number().int().positive(),
+})
+export const analysisRunSchema = analysisStartSchema.extend({
+  settingsVersion: count,
+  stage: z.string().nullable(),
+  completedCount: count,
+  succeededCount: count,
+  failedCount: count,
+  progressPercent: z.number().int().min(0).max(100),
+})
+export const candidatesSchema = z.object({
+  items: z.array(
+    z.object({
+      selectionId: z.string().min(1),
+      externalId: z.string(),
+      title: z.string(),
+      startedAt: z.string(),
+      duplicateType: z.enum(['NONE', 'SAME_CONTENT', 'CONTENT_UPDATED']),
+      selectable: z.boolean(),
+      validationCode: z.string().nullable(),
+    }),
+  ),
+  page: z.number().int().positive(),
+  size: z.number().int().positive(),
+  total: count,
+})
+export const analysisItemsSchema = z.object({
+  items: z.array(
+    z.object({
+      itemId: id,
+      conversationId: id,
+      conversationVersionId: id,
+      status: z.string(),
+      scopeClassification: z.string().nullable(),
+      failureCode: z.string().nullable(),
+      feedbackIds: z.array(id),
+    }),
+  ),
+  page: z.number().int().positive(),
+  size: z.number().int().positive(),
+  total: count,
+})
 export const analysisStatusSchema = z.object({
   status,
   progress: z.number().finite(),

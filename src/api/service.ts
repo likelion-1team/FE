@@ -2,6 +2,10 @@ import { ApiError, endSession, request, queryString } from './client'
 import * as schemas from './schemas'
 import type {
   AnalysisStatus,
+  AnalysisStart,
+  AnalysisRun,
+  AnalysisItems,
+  CandidatePage,
   Conversation,
   FeedbackDetail,
   FeedbackList,
@@ -38,7 +42,7 @@ export const api = {
       authenticated: false,
     }),
   emailCheck: (email: string) => {
-    const method = (import.meta.env.VITE_EMAIL_CHECK_METHOD || 'POST').toUpperCase()
+    const method = (import.meta.env.VITE_EMAIL_CHECK_METHOD || 'GET').toUpperCase()
     if (method !== 'GET' && method !== 'POST')
       throw new ApiError(0, 'CONFIGURATION_ERROR', '이메일 확인 요청 설정을 확인해주세요.')
     return request<{ available: boolean }>(
@@ -60,7 +64,11 @@ export const api = {
   settings: (id: string, signal?: AbortSignal) =>
     request<Settings>(`/teams/${id}/settings`, { signal, validate: schemas.settingsSchema.parse }),
   saveSettings: (id: string, data: SettingsInput) =>
-    request(`/teams/${id}/settings`, { method: 'PUT', json: data }),
+    request<Settings>(`/teams/${id}/settings`, {
+      method: 'PUT',
+      json: data,
+      validate: schemas.settingsSchema.parse,
+    }),
   members: (id: string, signal?: AbortSignal) =>
     request<Member[]>(`/teams/${id}/members`, { signal, validate: schemas.membersSchema.parse }),
   addMember: (id: string, email: string) =>
@@ -90,12 +98,32 @@ export const api = {
       validate: schemas.uploadSchema.parse,
     })
   },
-  startAnalysis: (id: Id, selections: { externalId: string; taskTypeId: Id }[], key: string) =>
-    request<{ uploadId: Id; status: string }>(`/uploads/${id}/analyses`, {
+  candidates: (id: Id, page: number, search: string, signal?: AbortSignal) =>
+    request<CandidatePage>(
+      `/uploads/${id}/conversations${queryString({ page, size: 20, q: search })}`,
+      {
+        signal,
+        validate: schemas.candidatesSchema.parse,
+      },
+    ),
+  startAnalysis: (
+    id: Id,
+    settingsVersion: number,
+    selections: { selectionId: string; taskTypeId: Id }[],
+    key: string,
+  ) =>
+    request<AnalysisStart>(`/uploads/${id}/analyses`, {
       method: 'POST',
       headers: { 'Idempotency-Key': key },
-      json: { selections },
+      json: { settingsVersion, selections },
       validate: schemas.analysisStartSchema.parse,
+    }),
+  analysis: (id: string, signal?: AbortSignal) =>
+    request<AnalysisRun>(`/analyses/${id}`, { signal, validate: schemas.analysisRunSchema.parse }),
+  analysisItems: (id: string, page: number, signal?: AbortSignal) =>
+    request<AnalysisItems>(`/analyses/${id}/items${queryString({ page, size: 20 })}`, {
+      signal,
+      validate: schemas.analysisItemsSchema.parse,
     }),
   analysisStatus: (id: string, signal?: AbortSignal) =>
     request<AnalysisStatus>(`/uploads/${id}`, {

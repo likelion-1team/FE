@@ -194,10 +194,10 @@ describe('red team regressions', () => {
     expect(init?.body).toBeUndefined()
   })
 
-  it('keeps POST as the default deployed email-check contract', async () => {
+  it('keeps GET as the default deployed email-check contract', async () => {
     vi.stubEnv('VITE_EMAIL_CHECK_METHOD', '')
     vi.mocked(fetch).mockResolvedValue(json({ available: true }))
     await api.emailCheck('member@example.com')
-    expect(vi.mocked(fetch).mock.calls[0][1]?.method).toBe('POST')
+    expect(vi.mocked(fetch).mock.calls[0][1]?.method).toBe('GET')
   })
 })

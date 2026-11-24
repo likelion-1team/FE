@@ -21,26 +21,35 @@ export interface LoginResult extends Tokens {
   user: User
 }
 export interface TaskType {
-  id?: Id
-  taskTypeId?: Id
+  taskTypeId: Id
   name: string
-  successDefinition: string
+  successConditions: string[]
+  failureConditions: string[]
+  unknownConditions: string[]
 }
 export interface Settings {
-  taskTypes: TaskType[]
+  version: number
+  taskType: TaskType | null
   targetFrom: string | null
   targetTo: string | null
   onboardingStartDate: string | null
   targetCount: number | null
-  minDailyConversations?: number
-  hourlyLaborCost?: number
+  policies: {
+    policyVersion: number
+    minSampleSize: number
+    minTeamContributors: number
+    minOutcomeConfirmationRate: number
+    uploadRetentionMinutes: number
+    maxSelectionsPerRequest: number
+  }
 }
 export interface SettingsInput {
-  taskTypes: { name: string; successDefinition: string }[]
+  expectedVersion: number
+  taskType: Omit<TaskType, 'taskTypeId'>
   targetFrom: string
   targetTo: string
-  onboardingStartDate: string
-  targetCount?: number | null
+  onboardingStartDate: string | null
+  targetCount: number | null
 }
 export interface Member {
   userId: Id
@@ -96,7 +105,51 @@ export interface Upload {
   uploadId: Id
   conversations: Candidate[]
 }
-export type UploadStatus = 'UPLOADED' | 'ANALYZING' | 'DONE' | 'FAILED'
+export interface CandidatePage {
+  items: {
+    selectionId: string
+    title: string
+    startedAt: string
+    externalId: string
+    duplicateType: 'NONE' | 'SAME_CONTENT' | 'CONTENT_UPDATED'
+    selectable: boolean
+    validationCode: string | null
+  }[]
+  page: number
+  size: number
+  total: number
+}
+export type RunStatus = 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'PARTIALLY_SUCCEEDED' | 'FAILED'
+export interface AnalysisStart {
+  analysisId: Id
+  uploadId: Id
+  status: RunStatus
+  selectedCount: number
+  pollAfterSeconds: number
+}
+export interface AnalysisRun extends AnalysisStart {
+  settingsVersion: number
+  stage: string | null
+  completedCount: number
+  succeededCount: number
+  failedCount: number
+  progressPercent: number
+}
+export interface AnalysisItems {
+  items: {
+    itemId: Id
+    conversationId: Id
+    conversationVersionId: Id
+    status: string
+    scopeClassification: string | null
+    failureCode: string | null
+    feedbackIds: Id[]
+  }[]
+  page: number
+  size: number
+  total: number
+}
+export type UploadStatus = 'UPLOADED' | 'ANALYZING' | 'DONE' | 'FAILED' | 'CONSUMED'
 export interface AnalysisStatus {
   status: UploadStatus
   progress: number

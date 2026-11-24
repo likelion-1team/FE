@@ -52,7 +52,7 @@ test('team switch changes role, clears private UI and exposes manager controls',
   ).toBe(true)
 })
 
-test('upload selects only eligible conversations and sends taskTypeId with externalId', async ({
+test('upload selects only eligible conversations and sends settingsVersion and selectionId with taskTypeId', async ({
   page,
 }) => {
   const calls = await mockApi(page)
@@ -68,8 +68,11 @@ test('upload selects only eligible conversations and sends taskTypeId with exter
   await page.getByRole('button', { name: '1건 분석 시작' }).click()
   await expect(page.getByRole('heading', { name: '분석 완료', exact: true })).toBeVisible()
   const start = calls.find((c) => c.path === '/uploads/31/analyses')!
-  expect(JSON.parse(start.body!)).toEqual({ selections: [{ externalId: 'c1', taskTypeId: 7 }] })
-  expect(calls.some((c) => c.path === '/uploads/31')).toBe(true)
+  expect(JSON.parse(start.body!)).toEqual({
+    settingsVersion: 3,
+    selections: [{ selectionId: 'selection-1', taskTypeId: 7 }],
+  })
+  expect(calls.some((c) => c.path === '/analyses/41')).toBe(true)
 })
 
 test('upload errors remain errors and do not show false completion', async ({ page }) => {
@@ -125,9 +128,15 @@ test('manager saves deployed settings shape and can manage guides', async ({ pag
   await page.getByRole('button', { name: '설정 저장' }).click()
   await expect(page.getByRole('dialog')).toHaveCount(0)
   const saved = calls.find((c) => c.method === 'PUT' && c.path.endsWith('/settings'))!
-  expect(JSON.parse(saved.body!).taskTypes).toEqual([
-    { name: '프로젝트 보고서', successDefinition: '필수 항목·수치·근거가 충족된 보고서' },
-  ])
+  expect(JSON.parse(saved.body!)).toMatchObject({
+    expectedVersion: 3,
+    taskType: {
+      name: '프로젝트 보고서',
+      successConditions: ['필수 항목·수치·근거가 충족된 보고서'],
+      failureConditions: ['필수 항목이 빠짐'],
+      unknownConditions: ['업무 결과 확인 불가'],
+    },
+  })
   await page.getByRole('link', { name: '공유 사례', exact: true }).click()
   await page.getByRole('button', { name: '개선 가이드로 지정' }).click()
   await page.getByRole('button', { name: '가이드로 지정', exact: true }).click()
@@ -169,7 +178,7 @@ test('responsive member workspace has no horizontal overflow', async ({ page }) 
   )
 })
 
-test('signup checks email with POST and submits validated credentials', async ({ page }) => {
+test('signup checks email with GET and submits validated credentials', async ({ page }) => {
   const calls = await mockApi(page)
   await page.goto('/signup')
   await page.getByLabel('이름', { exact: true }).fill('새 사용자')
@@ -180,5 +189,5 @@ test('signup checks email with POST and submits validated credentials', async ({
   await page.getByLabel('비밀번호 확인', { exact: true }).fill('password123')
   await page.getByRole('button', { name: '가입하기' }).click()
   await expect(page).toHaveURL(/\/login\?joined=1/)
-  expect(calls.some((c) => c.method === 'POST' && c.path === '/auth/email-check')).toBe(true)
+  expect(calls.some((c) => c.method === 'GET' && c.path === '/auth/email-check')).toBe(true)
 })

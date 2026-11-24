@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { ApiError } from '../api/client'
 import { api } from '../api/service'
 import type { Settings, SettingsInput } from '../api/types'
 import { useWorkspace } from '../components/Workspace'
@@ -21,8 +22,10 @@ import {
 function EditSettings({ settings, onClose }: { settings: Settings; onClose: () => void }) {
   const { teamId } = useWorkspace(),
     client = useQueryClient()
-  const [name, setName] = useState(settings.taskTypes[0]?.name || '')
-  const [success, setSuccess] = useState(settings.taskTypes[0]?.successDefinition || '')
+  const [name, setName] = useState(settings.taskType?.name || '')
+  const [success, setSuccess] = useState(settings.taskType?.successConditions.join('\n') || '')
+  const [failure, setFailure] = useState(settings.taskType?.failureConditions.join('\n') || '')
+  const [unknown, setUnknown] = useState(settings.taskType?.unknownConditions.join('\n') || '')
   const [from, setFrom] = useState(settings.targetFrom || ''),
     [to, setTo] = useState(settings.targetTo || ''),
     [onboarding, setOnboarding] = useState(settings.onboardingStartDate || ''),
@@ -37,7 +40,7 @@ function EditSettings({ settings, onClose }: { settings: Settings; onClose: () =
   })
   function submit(e: FormEvent) {
     e.preventDefault()
-    if (from > to || onboarding < from || onboarding > to) {
+    if (from > to || (onboarding && (onboarding < from || onboarding > to))) {
       setValidation('기간과 온보딩 시작일을 확인해주세요. 시작일은 대상 기간 안이어야 합니다.')
       return
     }
@@ -48,12 +51,32 @@ function EditSettings({ settings, onClose }: { settings: Settings; onClose: () =
       setValidation('대상 건수는 1~2,147,483,647 사이의 정수로 입력해주세요.')
       return
     }
+    const conditions = [success, failure, unknown].map((value) =>
+      value
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean),
+    )
+    if (
+      conditions.some(
+        (lines) => lines.length < 1 || lines.length > 10 || lines.some((line) => line.length > 500),
+      )
+    ) {
+      setValidation('성공·실패·판정 불가 조건을 각각 1~10줄, 줄당 500자 이하로 입력해주세요.')
+      return
+    }
     setValidation('')
     mutation.mutate({
-      taskTypes: [{ name: name.trim(), successDefinition: success.trim() }],
+      expectedVersion: settings.version,
+      taskType: {
+        name: name.trim(),
+        successConditions: conditions[0],
+        failureConditions: conditions[1],
+        unknownConditions: conditions[2],
+      },
       targetFrom: from,
       targetTo: to,
-      onboardingStartDate: onboarding,
+      onboardingStartDate: onboarding || null,
       targetCount: count ? Number(count) : null,
     })
   }
@@ -66,14 +89,30 @@ function EditSettings({ settings, onClose }: { settings: Settings; onClose: () =
     >
       <form onSubmit={submit}>
         <Field label="업무 유형 · 1개">
-          <input required maxLength={50} value={name} onChange={(e) => setName(e.target.value)} />
+          <input required maxLength={200} value={name} onChange={(e) => setName(e.target.value)} />
         </Field>
-        <Field label="업무 성공 정의">
+        <Field label="성공 조건 · 줄마다 1개">
           <textarea
             required
-            maxLength={500}
+            maxLength={5010}
             value={success}
             onChange={(e) => setSuccess(e.target.value)}
+          />
+        </Field>
+        <Field label="실패 조건 · 줄마다 1개">
+          <textarea
+            required
+            maxLength={5010}
+            value={failure}
+            onChange={(e) => setFailure(e.target.value)}
+          />
+        </Field>
+        <Field label="판정 불가 조건 · 줄마다 1개">
+          <textarea
+            required
+            maxLength={5010}
+            value={unknown}
+            onChange={(e) => setUnknown(e.target.value)}
           />
         </Field>
         <div className="two-col">
@@ -90,12 +129,11 @@ function EditSettings({ settings, onClose }: { settings: Settings; onClose: () =
             />
           </Field>
         </div>
-        <Field label="온보딩 시작일">
+        <Field label="온보딩 시작일 · 선택">
           <input
             type="date"
             min={from}
             max={to}
-            required
             value={onboarding}
             onChange={(e) => setOnboarding(e.target.value)}
           />
@@ -112,10 +150,30 @@ function EditSettings({ settings, onClose }: { settings: Settings; onClose: () =
         </Field>
         {validation && <Notice tone="error">{validation}</Notice>}
         <ErrorMessage error={mutation.error} />
+        {mutation.error instanceof ApiError && mutation.error.status === 409 && (
+          <Notice tone="error">
+            다른 변경이 먼저 저장됐습니다. 입력을 확인한 뒤 닫고 최신 기준을 다시 불러와주세요.
+            <Button
+              onClick={() => {
+                void client.invalidateQueries({ queryKey: ['team', teamId, 'settings'] })
+                onClose()
+              }}
+            >
+              최신 기준 불러오기
+            </Button>
+          </Notice>
+        )}
         <Button
           type="submit"
           variant="primary"
-          disabled={mutation.isPending || !name.trim() || !success.trim()}
+          disabled={
+            mutation.isPending ||
+            (mutation.error instanceof ApiError && mutation.error.status === 409) ||
+            !name.trim() ||
+            !success.trim() ||
+            !failure.trim() ||
+            !unknown.trim()
+          }
         >
           {mutation.isPending ? '저장 중…' : '설정 저장'}
         </Button>
@@ -167,17 +225,23 @@ export function SettingsPage() {
           <div className="two-col">
             <Card>
               <h2>분석할 업무와 기간</h2>
-              {settings.data.taskTypes.length ? (
-                settings.data.taskTypes.map((t, i) => (
-                  <div key={i}>
-                    <Field label="허용 업무 유형 · MVP 1개">
-                      <input readOnly value={t.name} />
+              {settings.data.taskType ? (
+                <>
+                  <Field label="허용 업무 유형 · MVP 1개">
+                    <input readOnly value={settings.data.taskType.name} />
+                  </Field>
+                  {(
+                    [
+                      ['성공 조건', settings.data.taskType.successConditions],
+                      ['실패 조건', settings.data.taskType.failureConditions],
+                      ['판정 불가 조건', settings.data.taskType.unknownConditions],
+                    ] as const
+                  ).map(([label, lines]) => (
+                    <Field key={label} label={label}>
+                      <textarea readOnly value={lines.join('\n')} />
                     </Field>
-                    <Field label="업무 성공 정의">
-                      <textarea readOnly value={t.successDefinition} />
-                    </Field>
-                  </div>
-                ))
+                  ))}
+                </>
               ) : (
                 <p>분석 기준이 아직 설정되지 않았습니다.</p>
               )}
@@ -201,10 +265,15 @@ export function SettingsPage() {
             </Card>
             <Card>
               <h2>평가 기준 · 조회 전용</h2>
-              <p>현재 서버에 저장된 업무 성공 정의로 분석합니다.</p>
+              <p>현재 서버에 저장된 성공·실패·판정 불가 조건으로 분석합니다.</p>
               <p>측정되지 않은 지표는 미측정으로 표시합니다.</p>
-              <FeaturePending title="결과 확인 기준 확장">
-                성공·실패·판정 불가 조건과 실제 업무 결과 확인은 준비 중입니다.
+              <p>
+                기준 버전 {settings.data.version} · 한 번에 최대{' '}
+                {settings.data.policies.maxSelectionsPerRequest}건 선택
+              </p>
+              <p>업로드 선택 가능 시간 {settings.data.policies.uploadRetentionMinutes}분</p>
+              <FeaturePending title="실제 업무 결과 확인 화면">
+                서버 API가 추가됐으며 화면 연결은 후속 작업입니다.
               </FeaturePending>
             </Card>
           </div>

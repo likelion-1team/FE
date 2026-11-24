@@ -6,14 +6,60 @@ export const teams = [
   { teamId: 2, name: '서비스 기획팀', myRole: 'LEADER', memberCount: 4 },
 ]
 export const settings = {
-  taskTypes: [
-    { id: 7, name: '주간 보고서 작성', successDefinition: '필수 항목·수치·근거가 충족된 보고서' },
-  ],
+  version: 3,
+  taskType: {
+    taskTypeId: 7,
+    name: '주간 보고서 작성',
+    successConditions: ['필수 항목·수치·근거가 충족된 보고서'],
+    failureConditions: ['필수 항목이 빠짐'],
+    unknownConditions: ['업무 결과 확인 불가'],
+  },
   targetFrom: '2026-11-01',
   targetTo: '2026-11-30',
   onboardingStartDate: '2026-11-16',
   targetCount: 120,
+  policies: {
+    policyVersion: 1,
+    minSampleSize: 20,
+    minTeamContributors: 5,
+    minOutcomeConfirmationRate: 0.8,
+    uploadRetentionMinutes: 60,
+    maxSelectionsPerRequest: 100,
+  },
 }
+export const analysis = {
+  analysisId: 41,
+  uploadId: 31,
+  settingsVersion: 3,
+  status: 'SUCCEEDED',
+  selectedCount: 1,
+  completedCount: 1,
+  succeededCount: 1,
+  failedCount: 0,
+  progressPercent: 100,
+  pollAfterSeconds: 3,
+  stage: 'COMPLETED',
+}
+export const candidateItems = [
+  {
+    selectionId: 'selection-1',
+    externalId: 'c1',
+    title: '11월 보고서',
+    startedAt: '2026-11-10',
+    duplicateType: 'NONE',
+    selectable: true,
+    validationCode: null,
+  },
+  {
+    selectionId: 'selection-duplicate',
+    externalId: 'duplicate',
+    title: '이미 분석된 대화',
+    startedAt: '2026-11-05',
+    duplicateType: 'SAME_CONTENT',
+    selectable: false,
+    validationCode: 'ALREADY_ANALYZED',
+  },
+]
 export const feedback = {
   feedbackId: 11,
   type: '맥락 누락',
@@ -60,14 +106,27 @@ export async function mockApi(
         accessToken: 'test-access',
         refreshToken: 'test-refresh',
       })
-    if (path === '/auth/email-check') return reply(route, { available: true })
+    if (path === '/auth/email-check')
+      return method === 'GET' && url.searchParams.has('email')
+        ? reply(route, { available: true })
+        : reply(route, { code: 'AUTH_REQUIRED' }, 401)
     if (path === '/auth/signup') return reply(route, { userId: 1 }, 201)
     if (path === '/auth/logout') return route.fulfill({ status: 204 })
     if (path === '/users/me') return reply(route, user)
     if (path === '/teams' && method === 'GET') return reply(route, teams)
     if (path === '/teams' && method === 'POST') return reply(route, { teamId: 3 }, 201)
     if (/\/teams\/\d+\/settings/.test(path))
-      return reply(route, method === 'PUT' ? { updatedAt: new Date().toISOString() } : settings)
+      return reply(
+        route,
+        method === 'PUT'
+          ? {
+              ...settings,
+              ...req.postDataJSON(),
+              taskType: { ...settings.taskType, ...req.postDataJSON().taskType },
+              version: 4,
+            }
+          : settings,
+      )
     if (/\/teams\/\d+\/members/.test(path))
       return options.membersFail
         ? reply(route, { message: '팀원 목록 오류' }, 500)
@@ -153,7 +212,41 @@ export async function mockApi(
         size: 10,
         totalElements: 1,
       })
-    if (path === '/uploads/31/analyses') return reply(route, { uploadId: 31, status: 'ANALYZING' })
+    if (path === '/uploads/31/conversations')
+      return reply(route, {
+        items: candidateItems.filter((c) => c.title.includes(url.searchParams.get('q') || '')),
+        page: 1,
+        size: 20,
+        total: candidateItems.length,
+      })
+    if (path === '/uploads/31/analyses') {
+      const body = req.postDataJSON()
+      if (
+        body.settingsVersion !== 3 ||
+        body.selections?.some((x: Record<string, unknown>) => !x.selectionId || x.externalId) ||
+        !req.headers()['idempotency-key']
+      )
+        return reply(route, { message: '잘못된 분석 계약' }, 422)
+      return reply(route, { ...analysis, status: 'QUEUED' }, 202)
+    }
+    if (path === '/analyses/41') return reply(route, analysis)
+    if (path === '/analyses/41/items')
+      return reply(route, {
+        items: [
+          {
+            itemId: 51,
+            conversationId: 21,
+            conversationVersionId: 61,
+            status: 'SUCCEEDED',
+            scopeClassification: 'IN_SCOPE',
+            failureCode: null,
+            feedbackIds: [11],
+          },
+        ],
+        page: 1,
+        size: 20,
+        total: 1,
+      })
     if (path === '/uploads/31')
       return reply(route, {
         status: 'DONE',
