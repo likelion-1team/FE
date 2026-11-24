@@ -1,1 +1,68 @@
-# FE
+# AI 업무 온보딩 · FE
+
+Figma의 팀원·팀장 화면을 React 19, TypeScript, Vite, React Router, TanStack Query와 일반 CSS로 구현했습니다. 초기 저장소는 README만 있었으며, 현재 배포된 `/api/v1` 계약을 기준으로 연동합니다. 목업 데이터는 E2E 테스트에만 있으며 서비스 화면에 예시 수치를 넣지 않습니다.
+
+- [팀원 디자인](https://www.figma.com/design/M6iBTw20Bc1xbjXsy1m0xi?node-id=179-208)
+- [팀장 디자인](https://www.figma.com/design/M6iBTw20Bc1xbjXsy1m0xi?node-id=179-209)
+- [공통·연동 명세](https://www.figma.com/design/M6iBTw20Bc1xbjXsy1m0xi?node-id=179-210)
+- [현재 배포 OpenAPI](https://t0k1.duckdns.org/v3/api-docs)
+
+## 실행
+
+Node.js 24 LTS와 npm을 사용합니다.
+
+```sh
+npm ci
+npm run dev
+```
+
+기본 주소는 `http://127.0.0.1:5173`입니다. `.env.example`을 `.env.local`로 복사하면 접속 설정을 변경할 수 있습니다. 기본 `/api/v1` 요청은 Vite 프록시를 통해 `https://t0k1.duckdns.org`로 전달합니다. 실제 계정으로 회원가입 또는 로그인한 뒤 팀을 선택하세요. 소스와 환경 변수에 비밀번호·토큰을 넣지 않습니다.
+
+```sh
+npm run lint
+npm test
+npm run build
+npx playwright install chromium
+npm run test:e2e
+npm run check:api
+```
+
+`check:api`는 공개 OpenAPI와 비인증 `/users/me` GET만 검사합니다. 브라우저 시나리오는 네트워크 응답을 가로채는 테스트이며 운영 서버에 계정·팀·분석 데이터를 만들지 않습니다.
+
+## 구현 범위
+
+| 기능                                                   | 상태                                                    |
+| ------------------------------------------------------ | ------------------------------------------------------- |
+| 회원가입·이메일 중복 확인·로그인·로그아웃·내 정보      | 배포 API 연결                                           |
+| 내 팀 조회·팀 생성·팀 전환·팀별 역할 적용              | 배포 API 연결                                           |
+| 분석 기준 조회·수정, 팀원 명단·추가·제출 여부          | 배포 API 연결. 수정·관리는 LEADER 전용                  |
+| JSON/ZIP 업로드·제목 검색·중복 제외·선택 분석          | 배포 API 연결. externalId와 실제 taskTypeId 사용        |
+| 분석 진행 조회·완료·실패·본인 이력·페이지 이동         | 배포 API 연결. uploadId 기반 상태 조회                  |
+| 피드백 기간·유형·정렬·페이지 조회·상세·근거 원문       | 배포 API 연결                                           |
+| 도움됨·해당 없음·반응 취소, 실제 클립보드 복사         | 배포 API 연결. 복사 실패도 안내                         |
+| 기존 공유 철회                                         | 배포 API 연결. 새 공유 승인은 비식별 미리보기 API 대기  |
+| 팀장 공유 사례 조회·가이드 지정·해제, 전원 가이드 조회 | 배포 API 연결. feedbackId 기반 기존 경로                |
+| 나의 성과·팀 성과·기간/업무/단위/지표 필터·추이        | 배포 API 연결. scope=ME/TEAM을 항상 명시                |
+| 팀 목표·실제 업무 결과·재작업 유형·활용 이벤트·삭제    | 배포 경로 없음. 준비 중 안내, 저장 버튼 비활성          |
+| 비식별 공유본 미리보기와 버전 승인                     | 배포 경로 없음. 원본을 공유 승인 API에 대신 보내지 않음 |
+
+현재 백엔드는 팀원의 TEAM 조회를 403으로 제한할 수 있습니다. 팀원 메뉴에는 팀 성과 진입점을 제공하되 실제 403을 안내하며, ME 응답을 TEAM으로 둔갑시키지 않습니다. 현재 성과 응답은 v4의 본인 확인 지표가 아니라 기존 분석 지표이므로 화면에도 기존 명칭과 분석 기준임을 표시합니다.
+
+Figma의 샘플 차트는 `docs/design-reference/personal-trend.svg`로 보관했습니다. 실제 차트는 API 수치로 그리며, 누락·표본 부족을 0이나 연결 선으로 채우지 않습니다. IBM Plex Sans KR는 패키지에서 로컬 번들로 제공합니다.
+
+## 배포
+
+`npm run build` 결과물은 `dist/`입니다. Vercel에서는 포함된 `vercel.json`이 `/api/*`를 HTTPS 백엔드로 프록시하고 나머지 경로를 SPA로 처리합니다. GitHub Pages 단독 정적 호스팅은 이 프록시 설정을 지원하지 않습니다.
+
+다른 호스팅은 `/api/`를 같은 백엔드로 프록시하고, 클라이언트 경로에 `index.html` fallback을 설정해야 합니다. `npm run preview`는 정적 산출물 확인용이며 운영 프록시를 대신하지 않습니다. 직접 외부 API 주소를 `VITE_API_BASE_URL`로 사용하면 백엔드의 정확한 Origin 허용, 쿠키·CORS 구성이 필요합니다.
+
+## 인증·데이터 처리
+
+- accessToken과 구버전 refreshToken은 메모리에만 보관합니다. localStorage/sessionStorage/URL에 저장하지 않습니다. JSON 토큰 배포에서는 새로고침하면 다시 로그인합니다.
+- 로그인 응답에 refreshToken이 있으면 기존 JSON 갱신, 없으면 credentials 요청의 HttpOnly 쿠키 갱신을 사용합니다. `VITE_AUTH_TRANSPORT=json`은 JSON 모드 강제 설정입니다. 서버의 쿠키 전환 배포·Origin 설정을 별도로 확인하세요.
+- 동시 401은 한 번만 갱신하며, 재시도 실패 시 로그인으로 돌아갑니다. 로그아웃 중 도착한 이전 응답으로 세션을 복구하지 않습니다.
+- 팀 전환·로그아웃 때 요청과 개인 캐시를 정리합니다. FE 경로의 member/leader 문자열을 신뢰하지 않고 서버의 myRole을 적용합니다. 실제 데이터 접근은 서버가 최종 검사합니다.
+- 모든 오류를 빈 목록이나 성공으로 바꾸지 않습니다. 저장·분석 요청은 자동 반복하지 않습니다. 멱등 키 헤더를 함께 보내지만 구버전 서버가 중복 방지를 보장한다는 뜻은 아닙니다.
+- 전체 문서를 HTML로 삽입하지 않습니다. 원문은 React 텍스트로 이스케이프합니다. 사용자 콘텐츠·토큰을 로그에 출력하지 않습니다.
+
+백엔드와의 차이 및 후속 작업은 [API 통합 기록](docs/API-INTEGRATION.md)을 참고하세요.
