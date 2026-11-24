@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api/service'
 import type { Upload } from '../api/types'
 import { useWorkspace } from '../components/Workspace'
+import { useActiveScreen } from '../components/useActiveScreen'
 import {
   Button,
   Card,
@@ -25,6 +26,7 @@ const labels: Record<string, string> = {
 }
 
 export function UploadPage() {
+  const isActive = useActiveScreen()
   const { teamId, base } = useWorkspace(),
     navigate = useNavigate(),
     client = useQueryClient()
@@ -49,6 +51,7 @@ export function UploadPage() {
   const uploadMutation = useMutation({
     mutationFn: (file: File) => api.upload(teamId, file),
     onSuccess: (data) => {
+      if (!isActive()) return
       setUpload(data)
       setSelected([])
       setSearch('')
@@ -66,6 +69,7 @@ export function UploadPage() {
       )
     },
     onSuccess: (data) => {
+      if (!isActive()) return
       void client.invalidateQueries({ queryKey: ['team', teamId, 'history'] })
       navigate(`${base}/history?uploadId=${data.uploadId}`)
     },
@@ -117,6 +121,12 @@ export function UploadPage() {
             분석 대상: {task.name} · {formatDate(settings.data.targetFrom)}–
             {formatDate(settings.data.targetTo)} · 분석할 대화를 직접 선택해주세요.
           </Notice>
+          {start.isPending && (
+            <Notice>
+              분석 접수를 확인하고 있습니다. 접수된 분석은 화면을 이동해도 계속 진행되며, 해당 팀의
+              분석 이력에서 확인할 수 있습니다.
+            </Notice>
+          )}
           <Card className={`dropzone ${busy ? 'busy' : ''}`}>
             <div
               onDragOver={(e) => e.preventDefault()}

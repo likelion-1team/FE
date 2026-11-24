@@ -27,7 +27,6 @@ export function Topbar({ team }: { team?: Team }) {
   const client = useQueryClient()
   const navigate = useNavigate()
   const [info, setInfo] = useState(false)
-  const [logoutError, setLogoutError] = useState(false)
   return (
     <>
       <header className="topbar">
@@ -49,14 +48,12 @@ export function Topbar({ team }: { team?: Team }) {
             내 정보
           </Button>
           <Button
-            onClick={async () => {
-              try {
-                await logout()
-              } catch {
-                setLogoutError(true)
-              } finally {
-                navigate('/login', { replace: true })
-              }
+            onClick={() => {
+              const operation = logout()
+              navigate('/login', { replace: true })
+              void operation.catch(() => {
+                /* AuthProvider publishes a visible failure on the login page. */
+              })
             }}
           >
             로그아웃
@@ -69,11 +66,6 @@ export function Topbar({ team }: { team?: Team }) {
           <p>{user?.email}</p>
           <p className="muted">역할은 선택한 팀에 따라 적용됩니다.</p>
         </Modal>
-      )}
-      {logoutError && (
-        <span role="status" className="sr-only">
-          서버 연결을 확인할 수 없어 이 기기의 세션을 먼저 종료했습니다.
-        </span>
       )}
     </>
   )

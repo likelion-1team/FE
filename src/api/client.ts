@@ -1,4 +1,6 @@
 import type { Tokens } from './types'
+import { tokensSchema } from './schemas'
+import { automaticRestoreBlocked, beginLogout, finishLogout } from '../session-policy'
 
 export class ApiError extends Error {
   constructor(
@@ -38,12 +40,67 @@ export function clearSession() {
 export function hasAccessToken() {
   return Boolean(accessToken)
 }
+export function getSessionGeneration() {
+  return sessionGeneration
+}
 
-type Options = Omit<RequestInit, 'body'> & {
+type Options<T> = Omit<RequestInit, 'body'> & {
   json?: unknown
   body?: BodyInit
   authenticated?: boolean
   retryAuth?: boolean
+  timeoutMs?: number
+  validate?: (value: unknown) => T
+}
+
+export const LOGOUT_TIMEOUT_MS = 8000
+
+async function send<T>(
+  path: string,
+  init: RequestInit,
+  timeoutMs: number,
+  validate?: (value: unknown) => T,
+): Promise<T> {
+  const controller = new AbortController()
+  let timedOut = false
+  const abort = () => controller.abort(init.signal?.reason)
+  if (init.signal?.aborted) abort()
+  else init.signal?.addEventListener('abort', abort, { once: true })
+  const timer = setTimeout(() => {
+    timedOut = true
+    controller.abort()
+  }, timeoutMs)
+  try {
+    const response = await fetch(`${API_BASE}${path}`, { ...init, signal: controller.signal })
+    const data = await parseResponse<T>(response)
+    if (!validate) return data
+    try {
+      return validate(data)
+    } catch {
+      throw new ApiError(
+        response.status,
+        'INVALID_RESPONSE',
+        '서버 응답 형식이 올바르지 않습니다. 다시 시도해주세요.',
+      )
+    }
+  } catch (error) {
+    if (timedOut)
+      throw new ApiError(
+        0,
+        'REQUEST_TIMEOUT',
+        '서버 응답 시간이 초과됐습니다. 연결을 확인하고 다시 시도해주세요.',
+      )
+    if (controller.signal.aborted) throw controller.signal.reason
+    if (error instanceof ApiError) throw error
+    throw new ApiError(
+      0,
+      'NETWORK_ERROR',
+      '서버에 연결할 수 없습니다. 네트워크 상태를 확인해주세요.',
+    )
+  } finally {
+    clearTimeout(timer)
+    init.signal?.removeEventListener('abort', abort)
+  }
 }
 
 async function parseResponse<T>(response: Response): Promise<T> {
@@ -95,18 +152,24 @@ async function parseResponse<T>(response: Response): Promise<T> {
 }
 
 export async function refreshSession() {
+  if (automaticRestoreBlocked())
+    throw new ApiError(401, 'LOGGED_OUT', '로그아웃 상태입니다. 직접 로그인해주세요.')
   if (refreshFlight) return refreshFlight
   const generation = sessionGeneration
   const legacy = import.meta.env.VITE_AUTH_TRANSPORT === 'json' || Boolean(refreshToken)
   const body = legacy ? { refreshToken } : {}
   const flight = (async () => {
-    const response = await fetch(`${API_BASE}/auth/refresh`, {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-    const tokens = await parseResponse<Tokens>(response)
+    const tokens = await send<Tokens>(
+      '/auth/refresh',
+      {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      },
+      10000,
+      tokensSchema.parse,
+    )
     if (generation !== sessionGeneration)
       throw new ApiError(401, 'SESSION_CHANGED', '세션이 변경됐습니다.')
     setTokens(tokens)
@@ -119,31 +182,61 @@ export async function refreshSession() {
   }
 }
 
-export async function request<T>(path: string, options: Options = {}): Promise<T> {
-  const { json, authenticated = true, retryAuth = true, ...init } = options
+export async function endSession() {
+  const bearer = accessToken
+  const logoutId = beginLogout()
+  clearSession()
+  listeners.forEach((listener) => listener())
+  try {
+    await request<void>('/auth/logout', {
+      method: 'POST',
+      authenticated: false,
+      retryAuth: false,
+      timeoutMs: LOGOUT_TIMEOUT_MS,
+      headers: bearer ? { Authorization: `Bearer ${bearer}` } : undefined,
+    })
+    finishLogout(logoutId, true)
+  } catch (error) {
+    finishLogout(logoutId, false)
+    throw error
+  }
+}
+
+export async function request<T>(path: string, options: Options<T> = {}): Promise<T> {
+  const {
+    json,
+    authenticated = true,
+    retryAuth = true,
+    timeoutMs = 20000,
+    validate,
+    ...init
+  } = options
   const generation = sessionGeneration
   const headers = new Headers(init.headers)
   if (json !== undefined) headers.set('Content-Type', 'application/json')
   if (authenticated && accessToken) headers.set('Authorization', `Bearer ${accessToken}`)
-  let response: Response
+  let data: T
   try {
-    response = await fetch(`${API_BASE}${path}`, {
-      ...init,
-      headers,
-      credentials: 'include',
-      body: json !== undefined ? JSON.stringify(json) : init.body,
-    })
-  } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') throw error
-    throw new ApiError(
-      0,
-      'NETWORK_ERROR',
-      '서버에 연결할 수 없습니다. 네트워크 상태를 확인해주세요.',
+    data = await send<T>(
+      path,
+      {
+        ...init,
+        headers,
+        credentials: 'include',
+        body: json !== undefined ? JSON.stringify(json) : init.body,
+      },
+      timeoutMs,
+      validate,
     )
-  }
-  if (authenticated && generation !== sessionGeneration)
-    throw new ApiError(401, 'SESSION_CHANGED', '세션이 변경됐습니다.')
-  if (response.status === 401 && authenticated && retryAuth) {
+  } catch (error) {
+    if (authenticated && generation !== sessionGeneration)
+      throw new ApiError(401, 'SESSION_CHANGED', '세션이 변경됐습니다.')
+    if (!(error instanceof ApiError) || error.status !== 401 || !authenticated) throw error
+    if (!retryAuth) {
+      clearSession()
+      listeners.forEach((listener) => listener())
+      throw error
+    }
     // A slower request can return its old 401 after another request already rotated the token.
     if (accessToken && headers.get('Authorization') !== `Bearer ${accessToken}`)
       return request<T>(path, { ...options, retryAuth: false })
@@ -160,11 +253,6 @@ export async function request<T>(path: string, options: Options = {}): Promise<T
       throw new ApiError(401, 'SESSION_CHANGED', '세션이 변경됐습니다.')
     return request<T>(path, { ...options, retryAuth: false })
   }
-  if (response.status === 401 && authenticated && generation === sessionGeneration) {
-    clearSession()
-    listeners.forEach((fn) => fn())
-  }
-  const data = await parseResponse<T>(response)
   if (authenticated && generation !== sessionGeneration)
     throw new ApiError(401, 'SESSION_CHANGED', '세션이 변경됐습니다.')
   return data

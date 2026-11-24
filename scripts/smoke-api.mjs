@@ -3,9 +3,12 @@ const origin = (process.env.API_ORIGIN || 'https://t0k1.duckdns.org').replace(/\
 const response = await fetch(`${origin}/v3/api-docs`)
 if (!response.ok) throw new Error(`OpenAPI: ${response.status}`)
 const schema = await response.json()
+const emailCheckMethod = (process.env.VITE_EMAIL_CHECK_METHOD || 'POST').toLowerCase()
+if (!['post', 'get'].includes(emailCheckMethod))
+  throw new Error('VITE_EMAIL_CHECK_METHOD must be POST or GET')
 const required = [
   ['post', '/api/v1/auth/login'],
-  ['post', '/api/v1/auth/email-check'],
+  [emailCheckMethod, '/api/v1/auth/email-check'],
   ['post', '/api/v1/auth/refresh'],
   ['get', '/api/v1/teams'],
   ['post', '/api/v1/teams/{teamId}/uploads'],

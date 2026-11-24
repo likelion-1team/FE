@@ -9,6 +9,7 @@ import { AuthProvider } from './auth'
 import { ApiError } from './api/client'
 import App from './App'
 import './styles.css'
+import { ErrorBoundary } from './components/ErrorBoundary'
 
 const client = new QueryClient({
   defaultOptions: {
@@ -24,13 +25,15 @@ const client = new QueryClient({
 })
 createRoot(document.getElementById('root')!).render(
   <QueryClientProvider client={client}>
-    <BrowserRouter>
-      <AuthProvider>
-        <a className="skip-link" href="#main">
-          본문으로 이동
-        </a>
-        <App />
-      </AuthProvider>
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <AuthProvider>
+          <a className="skip-link" href="#main">
+            본문으로 이동
+          </a>
+          <App />
+        </AuthProvider>
+      </BrowserRouter>
+    </ErrorBoundary>
   </QueryClientProvider>,
 )

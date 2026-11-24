@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { resetLogoutIntent } from '../session-policy'
 import {
   ApiError,
   clearSession,
@@ -13,6 +14,7 @@ const json = (data: unknown, status = 200) =>
 
 describe('API session contract', () => {
   beforeEach(() => {
+    resetLogoutIntent()
     clearSession()
     vi.stubGlobal('fetch', vi.fn())
   })

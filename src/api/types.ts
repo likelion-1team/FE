@@ -109,7 +109,7 @@ export interface UploadHistory {
     uploadId: Id
     uploadedAt: string
     analyzedCount: number
-    period: { from: string; to: string }
+    period: { from: string; to: string } | null
     status: UploadStatus
   }[]
   page: number

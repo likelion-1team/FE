@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api/service'
+import { sharedContentPolicy } from '../api/shared-content-policy'
 import type { Example, SharedCase } from '../api/types'
 import { useWorkspace } from '../components/Workspace'
 import {
@@ -32,21 +33,29 @@ function Examples({ example }: { example: Example }) {
     </div>
   )
 }
-function CopyButton({ text }: { text: string }) {
+function CopyButton({ getText }: { getText: () => Promise<string> }) {
   const [message, setMessage] = useState('')
+  const [busy, setBusy] = useState(false)
   return (
     <>
       <Button
+        disabled={busy}
         onClick={async () => {
+          setBusy(true)
           try {
+            const text = await getText()
             await navigator.clipboard.writeText(text)
             setMessage('프롬프트를 복사했습니다.')
           } catch {
-            setMessage('복사하지 못했습니다. 텍스트를 직접 선택해 복사해주세요.')
+            setMessage(
+              '공유 상태를 확인할 수 없거나 복사하지 못했습니다. 가이드를 새로 확인해주세요.',
+            )
+          } finally {
+            setBusy(false)
           }
         }}
       >
-        가이드 프롬프트 복사
+        {busy ? '공유 상태 확인 중…' : '가이드 프롬프트 복사'}
       </Button>
       {message && <Notice>{message}</Notice>}
     </>
@@ -57,6 +66,7 @@ export function GuidesPage() {
   const { teamId, base } = useWorkspace(),
     [type, setType] = useState('')
   const query = useQuery({
+    ...sharedContentPolicy,
     queryKey: ['team', teamId, 'guides', type],
     queryFn: ({ signal }) => api.guides(teamId, type, signal),
   })
@@ -94,7 +104,16 @@ export function GuidesPage() {
                 <h3>개선 방법</h3>
                 <p>{guide.improvement}</p>
                 <Examples example={guide.example} />
-                <CopyButton text={guide.example.after} />
+                <CopyButton
+                  getText={async () => {
+                    const latest = await query.refetch({ throwOnError: true })
+                    const current = latest.data?.groups
+                      .flatMap((group) => group.guides)
+                      .find((item) => String(item.feedbackId) === String(guide.feedbackId))
+                    if (!current) throw new Error('공유가 철회되거나 가이드 지정이 해제됐습니다.')
+                    return current.example.after
+                  }}
+                />
               </Card>
             ))}
           </section>
@@ -113,6 +132,7 @@ export function SharedCasesPage() {
     [type, setType] = useState(''),
     [selected, setSelected] = useState<SharedCase | null>(null)
   const query = useQuery({
+    ...sharedContentPolicy,
     queryKey: ['team', teamId, 'shared', type],
     queryFn: ({ signal }) => api.sharedCases(teamId, type, signal),
     enabled: leader,

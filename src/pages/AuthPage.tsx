@@ -5,7 +5,7 @@ import { api } from '../api/service'
 import { Button, ErrorMessage, Field, Loading, Notice } from '../components/ui'
 
 export function AuthPage({ signup = false }: { signup?: boolean }) {
-  const { user, loading, login } = useAuth()
+  const { user, loading, login, logout, logoutState } = useAuth()
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -58,6 +58,7 @@ export function AuthPage({ signup = false }: { signup?: boolean }) {
       setBusy(false)
     }
   }
+  const loggingOut = logoutState?.phase === 'pending'
   return (
     <div className="auth-layout">
       <aside className="auth-brand">
@@ -80,6 +81,24 @@ export function AuthPage({ signup = false }: { signup?: boolean }) {
           <p>
             {signup ? '개인 계정을 만들고 팀에 참여하세요.' : '이메일로 업무 공간에 접속하세요.'}
           </p>
+          {logoutState && (
+            <Notice tone={logoutState.phase === 'failed' ? 'error' : ''}>
+              {loggingOut
+                ? '이 기기의 개인 화면을 차단했습니다. 서버의 로그아웃 처리를 확인하고 있습니다.'
+                : logoutState.phase === 'done'
+                  ? '로그아웃했습니다.'
+                  : '이 기기의 접근은 차단했습니다. 서버 세션 종료는 확인하지 못해 자동 로그인을 막았습니다.'}
+              {logoutState.phase === 'failed' && (
+                <Button
+                  onClick={() => {
+                    void logout().catch(() => {})
+                  }}
+                >
+                  서버 로그아웃 다시 시도
+                </Button>
+              )}
+            </Notice>
+          )}
           {!signup && new URLSearchParams(location.search).has('joined') && (
             <Notice>가입이 완료됐습니다. 로그인해주세요.</Notice>
           )}
@@ -145,7 +164,7 @@ export function AuthPage({ signup = false }: { signup?: boolean }) {
             </Field>
           )}
           <ErrorMessage error={error} />
-          <Button type="submit" variant="primary" disabled={busy}>
+          <Button type="submit" variant="primary" disabled={busy || loggingOut}>
             {busy ? '처리 중…' : signup ? '가입하기' : '로그인'}
           </Button>
           <Link className="button ghost" to={signup ? '/login' : '/signup'}>
