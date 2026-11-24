@@ -1,5 +1,7 @@
 # AI 업무 온보딩 · FE
 
+배포 주소: **https://likelion-1team-fe.vercel.app** · 배포 코드 `8dd5b22` (2026-11-24). 실제 서버 확인 범위와 로그인 오류는 [API 통합 기록](docs/API-INTEGRATION.md#vercel-실배포-확인)에 기록했습니다.
+
 Figma의 팀원·팀장 화면을 React 19, TypeScript, Vite, React Router, TanStack Query와 일반 CSS로 구현했습니다. 초기 저장소는 README만 있었으며, 현재 배포된 `/api/v1` 계약을 기준으로 연동합니다. 목업 데이터는 E2E 테스트에만 있으며 서비스 화면에 예시 수치를 넣지 않습니다.
 
 - [팀원 디자인](https://www.figma.com/design/M6iBTw20Bc1xbjXsy1m0xi?node-id=179-208)
