@@ -175,6 +175,9 @@ export function AuthPage({ signup = false }: { signup?: boolean }) {
             <br />
             선택한 팀에서의 역할이 적용됩니다.
           </small>
+          <a className="button secondary" href="/demo">
+            합성 데이터로 데모 체험
+          </a>
         </form>
       </main>
     </div>

@@ -10,6 +10,7 @@ import { ApiError } from './api/client'
 import App from './App'
 import './styles.css'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import DemoApp from './demo/DemoApp'
 
 const client = new QueryClient({
   defaultOptions: {
@@ -27,12 +28,16 @@ createRoot(document.getElementById('root')!).render(
   <QueryClientProvider client={client}>
     <ErrorBoundary>
       <BrowserRouter>
-        <AuthProvider>
-          <a className="skip-link" href="#main">
-            본문으로 이동
-          </a>
-          <App />
-        </AuthProvider>
+        {window.location.pathname === '/demo' || window.location.pathname.startsWith('/demo/') ? (
+          <DemoApp />
+        ) : (
+          <AuthProvider>
+            <a className="skip-link" href="#main">
+              본문으로 이동
+            </a>
+            <App />
+          </AuthProvider>
+        )}
       </BrowserRouter>
     </ErrorBoundary>
   </QueryClientProvider>,
