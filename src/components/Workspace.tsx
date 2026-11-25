@@ -98,13 +98,15 @@ export function Workspace() {
     return <Navigate to={`${base}/dashboard`} replace />
   const menu = [
     ['dashboard', '나의 성과'],
-    ['team-dashboard', '팀 성과'],
+    ...(team.capabilities?.canViewTeamMetrics === true ? [['team-dashboard', '팀 성과']] : []),
     ['upload', '대화 업로드'],
     ['history', '분석 이력'],
     ['feedbacks', '내 피드백'],
     ['guides', '개선 가이드'],
     ['settings', leader ? '팀 설정' : '분석 대상 · 기준'],
-    ...(leader ? [['shared', '공유 사례']] : []),
+    ...(leader && team.capabilities?.canManageSharedCases === true
+      ? [['shared', '공유 사례']]
+      : []),
   ]
   return (
     <Context.Provider value={{ team, teamId, leader, base }}>

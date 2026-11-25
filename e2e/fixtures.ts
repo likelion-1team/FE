@@ -2,8 +2,34 @@ import { expect, type Page, type Route } from '@playwright/test'
 
 export const user = { userId: 1, name: '테스트 사용자', email: 'tester@example.com' }
 export const teams = [
-  { teamId: 1, name: '콘텐츠 운영팀', myRole: 'MEMBER', memberCount: 5 },
-  { teamId: 2, name: '서비스 기획팀', myRole: 'LEADER', memberCount: 4 },
+  {
+    teamId: 1,
+    name: '콘텐츠 운영팀',
+    myRole: 'MEMBER',
+    memberCount: 5,
+    capabilities: {
+      canViewOwnData: true,
+      canViewTeamMetrics: true,
+      canEditSettings: false,
+      canEditGoals: false,
+      canManageMembers: false,
+      canManageSharedCases: false,
+    },
+  },
+  {
+    teamId: 2,
+    name: '서비스 기획팀',
+    myRole: 'LEADER',
+    memberCount: 4,
+    capabilities: {
+      canViewOwnData: true,
+      canViewTeamMetrics: true,
+      canEditSettings: true,
+      canEditGoals: true,
+      canManageMembers: true,
+      canManageSharedCases: true,
+    },
+  },
 ]
 export const settings = {
   version: 3,
@@ -70,6 +96,13 @@ export const feedback = {
 }
 export const detail = {
   ...feedback,
+  itemId: 51,
+  conversationId: 21,
+  conversationVersionId: 61,
+  evidenceMessageIds: ['message-2'],
+  limitations: [],
+  reaction: null,
+  sharing: { status: 'SHARED', version: 1, sharedCaseId: 11 },
   problem: '형식과 제약이 대화 도중 추가됐습니다.',
   causes: ['최초 요청의 완료 기준이 구체적이지 않았을 수 있습니다.'],
   improvement: '목적·독자·필수 항목·출력 형식을 함께 전달하세요.',
@@ -113,7 +146,8 @@ export async function mockApi(
     if (path === '/auth/signup') return reply(route, { userId: 1 }, 201)
     if (path === '/auth/logout') return route.fulfill({ status: 204 })
     if (path === '/users/me') return reply(route, user)
-    if (path === '/teams' && method === 'GET') return reply(route, teams)
+    if (path === '/teams' && method === 'GET')
+      return reply(route, { items: teams, page: 1, size: 100, total: teams.length })
     if (path === '/teams' && method === 'POST') return reply(route, { teamId: 3 }, 201)
     if (/\/teams\/\d+\/settings/.test(path))
       return reply(
@@ -134,9 +168,14 @@ export async function mockApi(
             route,
             method === 'POST'
               ? { userId: 3, name: '새 팀원', role: 'MEMBER' }
-              : [{ ...user, role: 'LEADER', submitted: true }],
+              : {
+                  items: [{ ...user, role: 'LEADER', submitted: true }],
+                  page: 1,
+                  size: 100,
+                  total: 1,
+                },
           )
-    if (/\/teams\/\d+\/filter-options/.test(path))
+    if (/\/teams\/\d+\/dashboard\/filter-options/.test(path))
       return reply(route, {
         taskTypes: [{ id: 7, name: '주간 보고서 작성' }],
         models: [],
@@ -262,17 +301,21 @@ export async function mockApi(
         ? route.fulfill({ status: 204 })
         : reply(route, { reaction: req.postDataJSON().reaction })
     if (path === '/feedbacks/11/share') return reply(route, { isShared: req.postDataJSON().shared })
-    if (path === '/feedbacks/11/guide')
+    if (path === '/teams/2/guides/11')
       return method === 'DELETE' ? route.fulfill({ status: 204 }) : reply(route, { isGuide: true })
-    if (path === '/conversations/21')
+    if (path === '/conversation-versions/61')
       return reply(route, {
         title: '주간 보고서',
         startedAt: '2026-11-22',
-        model: 'GPT',
-        highlightIndexes: [2],
+        conversationVersionId: 61,
+        highlightMessageIds: ['message-2'],
         messages: [
-          { idx: 1, role: 'USER', content: '보고서 써줘.' },
-          { idx: 2, role: 'USER', content: '<script>alert(1)</script> 표로 바꿔줘.' },
+          { messageId: 'message-1', role: 'USER', content: '보고서 써줘.' },
+          {
+            messageId: 'message-2',
+            role: 'USER',
+            content: '<script>alert(1)</script> 표로 바꿔줘.',
+          },
         ],
       })
     if (path.endsWith('/guides'))
@@ -280,7 +323,24 @@ export async function mockApi(
         groups: [{ type: '맥락 누락', guides: [{ ...detail, guideAddedAt: '2026-11-22' }] }],
       })
     if (path.endsWith('/shared-cases'))
-      return reply(route, { items: [{ ...detail, isGuide: false, taskType: '주간 보고서 작성' }] })
+      return reply(route, {
+        items: [
+          {
+            sharedCaseId: 11,
+            shareVersion: 1,
+            taskTypeId: 7,
+            type: detail.type,
+            title: detail.title,
+            problem: detail.problem,
+            improvement: detail.improvement,
+            example: detail.example,
+            isGuide: false,
+          },
+        ],
+        page: 1,
+        size: 100,
+        total: 1,
+      })
     return reply(route, { code: 'NOT_FOUND', message: `Unhandled mock: ${method} ${path}` }, 404)
   })
   return calls

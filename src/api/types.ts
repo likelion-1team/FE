@@ -5,7 +5,16 @@ export interface User {
   name: string
   email: string
 }
+export interface Capabilities {
+  canViewOwnData: boolean
+  canViewTeamMetrics: boolean
+  canEditSettings: boolean
+  canEditGoals: boolean
+  canManageMembers: boolean
+  canManageSharedCases: boolean
+}
 export interface Team {
+  capabilities?: Capabilities
   teamId: Id
   name: string
   description?: string
@@ -59,6 +68,11 @@ export interface Member {
   submitted: boolean
 }
 export interface FilterOptions {
+  settingsVersions?: number[]
+  allowedUnits?: string[]
+  availableWeeks?: { weekStart: string; weekEnd: string }[]
+  settingsVersion?: number
+
   taskTypes: { id: Id; name: string }[]
   models: string[]
   dataFrom: string | null
@@ -66,12 +80,27 @@ export interface FilterOptions {
 }
 export interface Metric {
   value: number | null
+  status?: string
+  assessmentSource?: string
+  valueSource?: string
+  sampleSize?: number | null
+  reasonCodes?: string[]
   prevValue?: number | null
   estimated?: boolean
 }
 export interface Kpis {
   from: string
   to: string
+  cohortCoverage?: {
+    selectedCount: number
+    inScopeCount: number
+    excludedCount: number
+    pendingCount: number
+    failedCount: number
+    outcomeConfirmedCount: number
+    reworkConfirmedCount: number
+    tokenMeasuredCount: number
+  } | null
   tokensPerSuccess: Metric
   reworkRate: Metric
   successRate: Metric
@@ -91,7 +120,8 @@ export interface Trends {
   points: {
     date: string
     value: number | null
-    conversationCount: number
+    conversationCount: number | null
+    status?: string
     insufficientSample: boolean
   }[]
 }
@@ -103,7 +133,9 @@ export interface Candidate {
 }
 export interface Upload {
   uploadId: Id
-  conversations: Candidate[]
+  conversations?: Candidate[]
+  settingsVersion?: number
+  expiresAt?: string
 }
 export interface CandidatePage {
   items: {
@@ -149,9 +181,11 @@ export interface AnalysisItems {
   size: number
   total: number
 }
-export type UploadStatus = 'UPLOADED' | 'ANALYZING' | 'DONE' | 'FAILED' | 'CONSUMED'
+export type UploadStatus =
+  'UPLOADED' | 'ANALYZING' | 'DONE' | 'FAILED' | 'CONSUMED' | 'READY' | 'EXPIRED' | RunStatus
 export interface AnalysisStatus {
   status: UploadStatus
+  analysisId?: Id | null
   progress: number
   failReason?: string | null
   savedCount?: number
@@ -160,8 +194,9 @@ export interface AnalysisStatus {
 export interface UploadHistory {
   content: {
     uploadId: Id
+    analysisId?: Id | null
     uploadedAt: string
-    analyzedCount: number
+    analyzedCount: number | null
     period: { from: string; to: string } | null
     status: UploadStatus
   }[]
@@ -175,6 +210,7 @@ export interface Example {
   after: string
 }
 export interface FeedbackItem {
+  conversationVersionId?: Id | null
   feedbackId: Id
   type: string
   title: string
@@ -187,6 +223,7 @@ export interface FeedbackList {
   days: { date: string; feedbacks: FeedbackItem[] }[]
 }
 export interface FeedbackDetail {
+  conversationVersionId: Id | null
   feedbackId: Id
   type: string
   title: string
@@ -194,7 +231,10 @@ export interface FeedbackDetail {
   causes: string[]
   improvement: string
   example: Example
-  evidences: { conversationId: Id; turnIndexes: number[] }[]
+  reaction?: Reaction | null
+  sharing?: { status: string; version: number; sharedCaseId: Id | null }
+  limitations?: string[]
+  evidences: { conversationVersionId: Id; turnIndexes: number[] }[]
 }
 export interface Conversation {
   title: string
@@ -204,6 +244,8 @@ export interface Conversation {
   highlightIndexes: number[]
 }
 export interface SharedCase {
+  sharedCaseId?: Id
+  shareVersion?: number
   feedbackId: Id
   taskType: string
   type: string
@@ -214,6 +256,7 @@ export interface SharedCase {
   isGuide: boolean
 }
 export interface Guide {
+  sharedCaseId?: Id
   feedbackId: Id
   title: string
   problem: string

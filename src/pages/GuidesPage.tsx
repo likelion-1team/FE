@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { ApiError } from '../api/client'
+import { useActiveScreen } from '../components/useActiveScreen'
 import { api } from '../api/service'
 import { sharedContentPolicy } from '../api/shared-content-policy'
 import type { Example, SharedCase } from '../api/types'
@@ -34,6 +36,7 @@ function Examples({ example }: { example: Example }) {
   )
 }
 function CopyButton({ getText }: { getText: () => Promise<string> }) {
+  const isActive = useActiveScreen()
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
   return (
@@ -44,14 +47,17 @@ function CopyButton({ getText }: { getText: () => Promise<string> }) {
           setBusy(true)
           try {
             const text = await getText()
+            if (!isActive()) return
             await navigator.clipboard.writeText(text)
+            if (!isActive()) return
             setMessage('프롬프트를 복사했습니다.')
           } catch {
+            if (!isActive()) return
             setMessage(
               '공유 상태를 확인할 수 없거나 복사하지 못했습니다. 가이드를 새로 확인해주세요.',
             )
           } finally {
-            setBusy(false)
+            if (isActive()) setBusy(false)
           }
         }}
       >
@@ -127,7 +133,7 @@ export function GuidesPage() {
 }
 
 export function SharedCasesPage() {
-  const { teamId, leader, base } = useWorkspace(),
+  const { teamId, leader, base, team } = useWorkspace(),
     client = useQueryClient(),
     [type, setType] = useState(''),
     [selected, setSelected] = useState<SharedCase | null>(null)
@@ -135,17 +141,46 @@ export function SharedCasesPage() {
     ...sharedContentPolicy,
     queryKey: ['team', teamId, 'shared', type],
     queryFn: ({ signal }) => api.sharedCases(teamId, type, signal),
-    enabled: leader,
+    enabled: leader && team.capabilities?.canManageSharedCases === true,
   })
   const mutation = useMutation({
-    mutationFn: (item: SharedCase) => api.guide(item.feedbackId, !item.isGuide),
+    mutationFn: async (item: SharedCase) => {
+      if (item.sharedCaseId == null || item.shareVersion == null)
+        throw new ApiError(200, 'INVALID_RESPONSE', '공유 상태를 확인할 수 없습니다.')
+      const latest = await api.sharedCases(teamId, type)
+      client.setQueryData(['team', teamId, 'shared', type], latest)
+      const current = latest.items.find(
+        (row) => String(row.sharedCaseId) === String(item.sharedCaseId),
+      )
+      if (
+        !current ||
+        current.shareVersion !== item.shareVersion ||
+        current.isGuide !== item.isGuide
+      )
+        throw new ApiError(
+          409,
+          'SHARING_CHANGED',
+          '공유 상태가 변경됐습니다. 최신 목록을 확인해주세요.',
+        )
+      return api.guide(item.sharedCaseId, !item.isGuide, teamId, item.shareVersion)
+    },
     onSuccess: async () => {
       setSelected(null)
       await client.invalidateQueries({ queryKey: ['team', teamId, 'shared'] })
       await client.invalidateQueries({ queryKey: ['team', teamId, 'guides'] })
     },
   })
-  if (!leader)
+  const visibleSelection =
+    selected &&
+    !query.isError &&
+    query.data?.items.find(
+      (item) =>
+        item.sharedCaseId != null &&
+        String(item.sharedCaseId) === String(selected.sharedCaseId) &&
+        item.shareVersion === selected.shareVersion &&
+        item.isGuide === selected.isGuide,
+    )
+  if (!leader || team.capabilities?.canManageSharedCases !== true)
     return <ErrorState error={new Error('공유 사례 관리는 팀장만 이용할 수 있습니다.')} />
   return (
     <>
@@ -179,6 +214,7 @@ export function SharedCasesPage() {
               <h2>{item.title}</h2>
               <Button
                 variant={item.isGuide ? 'secondary' : 'primary'}
+                disabled={item.sharedCaseId == null || item.shareVersion == null}
                 onClick={() => {
                   mutation.reset()
                   setSelected(item)
@@ -194,22 +230,27 @@ export function SharedCasesPage() {
             <p>개선 방안 · {item.improvement}</p>
             <Examples example={item.example} />
             <small>공유 철회 시 사례와 가이드에서 제외됩니다.</small>
+            {(item.sharedCaseId == null || item.shareVersion == null) && (
+              <Notice>공유 상태를 확인할 수 없어 가이드 지정을 사용할 수 없습니다.</Notice>
+            )}
           </Card>
         ))
       )}
       <Link className="button secondary" to={`${base}/guides`}>
         팀 개선 가이드 보기
       </Link>
-      {selected && (
+      {visibleSelection && (
         <Modal
-          title={selected.isGuide ? '가이드 지정을 해제할까요?' : '개선 가이드로 지정할까요?'}
+          title={
+            visibleSelection.isGuide ? '가이드 지정을 해제할까요?' : '개선 가이드로 지정할까요?'
+          }
           onClose={() => {
             if (!mutation.isPending) setSelected(null)
           }}
         >
-          <p>{selected.title}</p>
+          <p>{visibleSelection.title}</p>
           <p>
-            {selected.isGuide
+            {visibleSelection.isGuide
               ? '공유 사례는 유지되며 가이드에서만 제외됩니다.'
               : '팀원 전체가 열람할 수 있습니다. 공유 내용에 개인·기밀 정보가 없는지 확인해주세요.'}
           </p>
@@ -217,9 +258,13 @@ export function SharedCasesPage() {
           <Button
             variant="primary"
             disabled={mutation.isPending}
-            onClick={() => mutation.mutate(selected)}
+            onClick={() => mutation.mutate(visibleSelection)}
           >
-            {mutation.isPending ? '처리 중…' : selected.isGuide ? '지정 해제' : '가이드로 지정'}
+            {mutation.isPending
+              ? '처리 중…'
+              : visibleSelection.isGuide
+                ? '지정 해제'
+                : '가이드로 지정'}
           </Button>
         </Modal>
       )}

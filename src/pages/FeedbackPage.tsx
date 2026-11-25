@@ -151,8 +151,8 @@ function OriginalConversation({
 }) {
   const { teamId } = useWorkspace()
   const query = useQuery({
-    queryKey: ['team', teamId, 'conversation', id, feedbackId],
-    queryFn: ({ signal }) => api.conversation(id, feedbackId, signal),
+    queryKey: ['team', teamId, 'conversation-version', id, feedbackId],
+    queryFn: ({ signal }) => api.conversationVersion(id, feedbackId, signal),
   })
   return (
     <Modal title="근거 대화 원문" onClose={onClose}>
@@ -187,6 +187,10 @@ function OriginalConversation({
 }
 
 export function FeedbackDetailPage() {
+  const { feedbackId = '' } = useParams()
+  return <FeedbackDetailContent key={feedbackId} />
+}
+function FeedbackDetailContent() {
   const { feedbackId = '' } = useParams(),
     { teamId, base } = useWorkspace(),
     client = useQueryClient()
@@ -203,7 +207,12 @@ export function FeedbackDetailPage() {
     [revoked, setRevoked] = useState(false),
     [copyMessage, setCopyMessage] = useState(''),
     [copyError, setCopyError] = useState(false)
-  const currentReaction = reactionOverride === undefined ? item?.myReaction : reactionOverride
+  const currentReaction =
+    reactionOverride === undefined
+      ? query.data && 'reaction' in query.data
+        ? query.data.reaction
+        : item?.myReaction
+      : reactionOverride
   function patchList(update: Partial<FeedbackItem>) {
     client.setQueriesData<FeedbackList>({ queryKey: ['team', teamId, 'feedbacks'] }, (old) =>
       old
@@ -228,7 +237,7 @@ export function FeedbackDetailPage() {
     },
   })
   const share = useMutation({
-    mutationFn: () => api.revokeShare(feedbackId),
+    mutationFn: () => api.revokeShare(feedbackId, query.data?.sharing?.version),
     onSuccess: async () => {
       setRevoked(true)
       setRevoke(false)
@@ -260,9 +269,9 @@ export function FeedbackDetailPage() {
         <span className="muted">{data.type}</span>
         {data.evidences.map((e, i) => (
           <Button
-            key={`${e.conversationId}-${i}`}
+            key={`${e.conversationVersionId}-${i}`}
             variant="ghost"
-            onClick={() => setOriginal(e.conversationId)}
+            onClick={() => setOriginal(e.conversationVersionId)}
           >
             근거 대화 원문{data.evidences.length > 1 ? ` ${i + 1}` : ''}
           </Button>
@@ -273,10 +282,22 @@ export function FeedbackDetailPage() {
           <h2>{data.title}</h2>
           <h3>문제</h3>
           <p className="pre-wrap">{data.problem}</p>
-          <h3>원인 후보</h3>
-          {data.causes.map((c, i) => (
-            <p key={i}>{c}</p>
-          ))}
+          {data.causes.length > 0 && (
+            <>
+              <h3>원인 후보</h3>
+              {data.causes.map((c, i) => (
+                <p key={i}>{c}</p>
+              ))}
+            </>
+          )}
+          {!!data.limitations?.length && (
+            <>
+              <h3>해석 시 유의사항</h3>
+              {data.limitations.map((text, i) => (
+                <p key={i}>{text}</p>
+              ))}
+            </>
+          )}
           <h3>개선 방안</h3>
           <p className="pre-wrap">{data.improvement}</p>
         </Card>
@@ -287,16 +308,17 @@ export function FeedbackDetailPage() {
           <FeaturePending title="공유본 미리보기">
             공유본을 확인하고 승인하는 기능은 준비 중입니다. 새 공유 승인은 아직 지원하지 않습니다.
           </FeaturePending>
-          {!revoked && item?.isShared !== false && (
-            <Button
-              onClick={() => {
-                share.reset()
-                setRevoke(true)
-              }}
-            >
-              기존 공유 철회
-            </Button>
-          )}
+          {!revoked &&
+            (data.sharing ? data.sharing.status === 'SHARED' : item?.isShared === true) && (
+              <Button
+                onClick={() => {
+                  share.reset()
+                  setRevoke(true)
+                }}
+              >
+                기존 공유 철회
+              </Button>
+            )}
           {revoked && <Notice>공유를 철회했습니다.</Notice>}
         </Card>
       </div>

@@ -183,16 +183,18 @@ function EditSettings({ settings, onClose }: { settings: Settings; onClose: () =
 }
 
 export function SettingsPage() {
-  const { teamId, leader } = useWorkspace(),
+  const { teamId, leader, team } = useWorkspace(),
     client = useQueryClient()
   const settings = useQuery({
     queryKey: ['team', teamId, 'settings'],
     queryFn: ({ signal }) => api.settings(teamId, signal),
   })
+  const canEdit = leader && team.capabilities?.canEditSettings === true
+  const canManageMembers = leader && team.capabilities?.canManageMembers === true
   const members = useQuery({
     queryKey: ['team', teamId, 'members'],
     queryFn: ({ signal }) => api.members(teamId, signal),
-    enabled: leader,
+    enabled: canManageMembers,
   })
   const [edit, setEdit] = useState(false),
     [add, setAdd] = useState(false),
@@ -257,7 +259,7 @@ export function SettingsPage() {
                 </Field>
               </div>
               <p>예상 대상 건수 {settings.data.targetCount ?? '미설정'}</p>
-              {leader && (
+              {canEdit && (
                 <Button variant="primary" onClick={() => setEdit(true)}>
                   분석 대상 수정
                 </Button>
@@ -277,12 +279,12 @@ export function SettingsPage() {
               </FeaturePending>
             </Card>
           </div>
-          {edit && leader && (
+          {edit && canEdit && (
             <EditSettings settings={settings.data} onClose={() => setEdit(false)} />
           )}
         </>
       )}
-      {leader && (
+      {canManageMembers && (
         <Card>
           <div className="row">
             <h2>팀원{members.data && ` · ${members.data.length}명`}</h2>
@@ -320,7 +322,7 @@ export function SettingsPage() {
           </small>
         </Card>
       )}
-      {add && leader && (
+      {add && canManageMembers && (
         <Modal
           title="이메일로 팀원 추가"
           onClose={() => {

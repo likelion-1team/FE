@@ -5,7 +5,7 @@ test('filter-option failure shows an error without an indefinite dependent loade
   page,
 }) => {
   const calls = await mockApi(page)
-  await page.route('**/api/v1/teams/*/filter-options', (route) =>
+  await page.route('**/api/v1/teams/*/dashboard/filter-options*', (route) =>
     route.fulfill({
       status: 503,
       contentType: 'application/json',
@@ -141,7 +141,7 @@ test('manager saves deployed settings shape and can manage guides', async ({ pag
   await page.getByRole('button', { name: '개선 가이드로 지정' }).click()
   await page.getByRole('button', { name: '가이드로 지정', exact: true }).click()
   await expect(page.getByRole('dialog')).toHaveCount(0)
-  expect(calls.some((c) => c.method === 'PUT' && c.path === '/feedbacks/11/guide')).toBe(true)
+  expect(calls.some((c) => c.method === 'PUT' && c.path === '/teams/2/guides/11')).toBe(true)
 })
 
 test('restricted team dashboard is an explicit 403, not zeros', async ({ page }) => {
