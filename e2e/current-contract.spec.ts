@@ -158,11 +158,52 @@ test('analysis polls by analysisId, stops on partial success and exposes failed 
   await expect(page.getByRole('heading', { name: '분석 중', exact: true })).toBeVisible()
   await page.clock.fastForward(3500)
   await expect(page.getByRole('heading', { name: '일부 분석 완료' })).toBeVisible()
-  await expect(page.getByText('실패 사유: MODEL_TIMEOUT')).toBeVisible()
+  await expect(page.getByText('오류 코드: MODEL_TIMEOUT')).toBeVisible()
+  await expect(page.getByText(/AI 분석 응답 시간이 초과됐습니다/)).toBeVisible()
   await expect(page.getByRole('link', { name: '피드백 11 보기' })).toBeVisible()
   const completedPolls = polls
   await page.clock.fastForward(20000)
   expect(polls).toBe(completedPolls)
+})
+
+test('missing server model configuration explains failure without offering empty new feedback', async ({
+  page,
+}) => {
+  await mockApi(page, { cookieSession: true })
+  await page.route('**/api/v1/analyses/41', (route) =>
+    reply(route, {
+      ...analysis,
+      status: 'FAILED',
+      completedCount: 1,
+      succeededCount: 0,
+      failedCount: 1,
+    }),
+  )
+  await page.route('**/api/v1/analyses/41/items*', (route) =>
+    reply(route, {
+      items: [
+        {
+          itemId: 1,
+          conversationId: 21,
+          conversationVersionId: 101,
+          status: 'FAILED',
+          scopeClassification: null,
+          failureCode: 'MODEL_NOT_CONFIGURED',
+          feedbackIds: [],
+        },
+      ],
+      page: 1,
+      size: 20,
+      total: 1,
+    }),
+  )
+  await page.goto('/teams/1/member/history?analysisId=41')
+  await expect(page.getByRole('heading', { name: '분석 실패', exact: true })).toBeVisible()
+  await expect(page.getByText(/서버의 AI 분석 설정이 완료되지 않아/)).toBeVisible()
+  await expect(page.getByText('오류 코드: MODEL_NOT_CONFIGURED')).toBeVisible()
+  await expect(page.getByRole('link', { name: '내 피드백 보기', exact: true })).toHaveCount(0)
+  await page.reload()
+  await expect(page.getByText(/서버의 AI 분석 설정이 완료되지 않아/)).toBeVisible()
 })
 
 test('unknown analysis success response is an explicit error without false completion', async ({

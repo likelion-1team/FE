@@ -109,3 +109,114 @@ it('restores analysisId from one-based upload history pages', async () => {
   })
   expect(String(vi.mocked(fetch).mock.calls[0][0])).toContain('page=1')
 })
+it('rejects a ME response to a TEAM metrics request', async () => {
+  vi.mocked(fetch).mockResolvedValue(json({ scope: 'ME', metrics, coverage: null }))
+  await expect(
+    api.kpis('4', { scope: 'TEAM', settingsVersion: '1', weekStart: '2026-11-16' }),
+  ).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+})
+it('hides coverage and sample sizes if any metric is suppressed even in an inconsistent response', async () => {
+  vi.mocked(fetch).mockResolvedValue(
+    json({
+      scope: 'TEAM',
+      metrics: metrics.map((m) => ({ ...m, value: 99, sampleSize: 9 })),
+      coverage: {
+        selectedCount: 9,
+        inScopeCount: 9,
+        excludedCount: 0,
+        pendingCount: 0,
+        failedCount: 0,
+        outcomeConfirmedCount: 9,
+        reworkConfirmedCount: 9,
+        tokenMeasuredCount: 9,
+      },
+    }),
+  )
+  const result = await api.kpis('4', {
+    scope: 'TEAM',
+    settingsVersion: '1',
+    weekStart: '2026-11-16',
+  })
+  expect(result.cohortCoverage).toBeNull()
+  expect(result.conversationCount.value).toBeNull()
+  expect(result.successRate.sampleSize).toBeNull()
+})
+it('rejects malformed current metrics rather than falling back to extra legacy fields', async () => {
+  vi.mocked(fetch).mockResolvedValue(
+    json({
+      scope: 'TEAM',
+      metrics: null,
+      coverage: null,
+      tokensPerSuccess: { value: 123 },
+      successRate: { value: 0.9 },
+      reworkRate: { value: 0.1 },
+      conversationCount: { value: 5 },
+    }),
+  )
+  await expect(
+    api.kpis('4', { scope: 'TEAM', settingsVersion: '1', weekStart: '2026-11-16' }),
+  ).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+})
+it('loads subsequent guide pages and groups each type only once', async () => {
+  const item = {
+    sharedCaseId: 7,
+    shareVersion: 1,
+    taskTypeId: 3,
+    type: '맥락 누락',
+    title: '공유 사례',
+    problem: '문제',
+    improvement: '개선',
+    example: { before: '전', after: '후' },
+    isGuide: true,
+  }
+  vi.mocked(fetch)
+    .mockResolvedValueOnce(json({ items: [item], page: 1, size: 1, total: 2 }))
+    .mockResolvedValueOnce(
+      json({ items: [{ ...item, sharedCaseId: 8 }], page: 2, size: 1, total: 2 }),
+    )
+  const result = await api.guides('4', '')
+  expect(result.groups).toHaveLength(1)
+  expect(result.groups[0].guides).toHaveLength(2)
+})
+it('rejects repeated page numbers rather than claiming a complete team list', async () => {
+  const item = { teamId: 4, name: '팀', myRole: 'MEMBER' }
+  vi.mocked(fetch).mockImplementation(async () =>
+    json({ items: [item], page: 1, size: 1, total: 2 }),
+  )
+  await expect(api.teams()).rejects.toMatchObject({ code: 'INVALID_RESPONSE' })
+})
+it('rejects original content returned for a different version', async () => {
+  vi.mocked(fetch).mockResolvedValue(
+    json({
+      conversationVersionId: 99,
+      title: '원문',
+      startedAt: '2026-11-25',
+      highlightMessageIds: [],
+      messages: [],
+    }),
+  )
+  await expect(api.conversationVersion(61, '11')).rejects.toMatchObject({
+    code: 'INVALID_RESPONSE',
+  })
+})
+it('accepts nullable v3 source ids without manufacturing a source reference', async () => {
+  vi.mocked(fetch).mockResolvedValue(
+    json({
+      feedbackId: 11,
+      itemId: null,
+      conversationId: 21,
+      conversationVersionId: null,
+      type: 'MISSING_CONTEXT',
+      title: '피드백',
+      problem: '문제',
+      causes: [],
+      improvement: '개선',
+      example: { before: '전', after: '후' },
+      evidenceMessageIds: [],
+      limitations: [],
+      reaction: null,
+      sharing: { status: 'NOT_SHARED', version: 0, sharedCaseId: null },
+    }),
+  )
+  expect((await api.feedback('11')).evidences).toEqual([])
+})

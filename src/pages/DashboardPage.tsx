@@ -113,6 +113,12 @@ export function TrendChart({ data }: { data: Trends }) {
 }
 
 export function DashboardPage({ scope = 'ME' }: { scope?: 'ME' | 'TEAM' }) {
+  const { team } = useWorkspace()
+  if (scope === 'TEAM' && team.capabilities?.canViewTeamMetrics !== true)
+    return <ErrorState error={new Error('이 팀의 팀 성과 조회 권한이 없습니다.')} />
+  return <DashboardContent key={scope} scope={scope} />
+}
+function DashboardContent({ scope }: { scope: 'ME' | 'TEAM' }) {
   const { teamId, leader, base } = useWorkspace()
   const options = useQuery({
     queryKey: ['team', teamId, 'options', scope],

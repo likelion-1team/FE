@@ -1,0 +1,123 @@
+.demo-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 24px;
+  background: var(--soft);
+  flex-wrap: wrap;
+}
+.demo-badge {
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: #f7df9b;
+  color: #59430c;
+  font-size: 12px;
+}
+.demo-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.demo-banner {
+  background: #fff4cd;
+  color: #59430c;
+  padding: 12px 24px;
+  font-size: 14px;
+}
+.demo-layout {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+}
+.demo-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 24px 16px;
+}
+.demo-nav .button {
+  justify-content: flex-start;
+}
+.demo-main {
+  padding: 28px;
+  max-width: 1150px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+}
+.demo-app .card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.demo-candidate {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 14px 0;
+  flex-wrap: wrap;
+}
+.demo-candidate input {
+  width: 20px;
+  height: 20px;
+}
+.demo-result {
+  border-bottom: 1px solid var(--border);
+  padding: 12px 0;
+}
+.demo-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+.demo-value {
+  font-size: 26px;
+  font-weight: 600;
+}
+.demo-trend {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.demo-trend meter {
+  flex: 1;
+  min-width: 100px;
+  height: 26px;
+}
+.demo-evidence {
+  background: #fff4cd;
+  padding: 12px;
+  border-radius: 8px;
+}
+.demo-app blockquote {
+  margin: 8px 0;
+  padding: 16px;
+  background: var(--soft);
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+.demo-app progress {
+  width: 100%;
+}
+@media (max-width: 760px) {
+  .demo-layout {
+    grid-template-columns: 1fr;
+  }
+  .demo-nav {
+    flex-direction: row;
+    overflow-x: auto;
+    padding: 12px;
+  }
+  .demo-main {
+    padding: 16px;
+  }
+  .demo-metrics {
+    grid-template-columns: 1fr;
+  }
+  .demo-header {
+    padding: 16px;
+  }
+}

@@ -90,8 +90,9 @@ export const feedbacks = z.object({
   items: z.array(
     z.object({
       feedbackId: id,
-      itemId: id,
-      conversationId: id,
+      itemId: id.nullable(),
+      conversationId: id.nullable(),
+      conversationVersionId: id.nullable(),
       type: z.string(),
       title: z.string(),
       occurrenceCount: count,
@@ -104,9 +105,9 @@ export const feedbacks = z.object({
 })
 export const feedback = z.object({
   feedbackId: id,
-  itemId: id,
-  conversationId: id,
-  conversationVersionId: id,
+  itemId: id.nullable(),
+  conversationId: id.nullable(),
+  conversationVersionId: id.nullable(),
   type: z.string(),
   title: z.string(),
   problem: z.string(),
@@ -119,6 +120,7 @@ export const feedback = z.object({
   sharing: z.object({ status: z.string(), version: count, sharedCaseId: id.nullable() }),
 })
 export const conversation = z.object({
+  conversationVersionId: id,
   title: z.string(),
   startedAt: z.string(),
   highlightMessageIds: z.array(z.string()),

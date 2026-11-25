@@ -5,7 +5,16 @@ export interface User {
   name: string
   email: string
 }
+export interface Capabilities {
+  canViewOwnData: boolean
+  canViewTeamMetrics: boolean
+  canEditSettings: boolean
+  canEditGoals: boolean
+  canManageMembers: boolean
+  canManageSharedCases: boolean
+}
 export interface Team {
+  capabilities?: Capabilities
   teamId: Id
   name: string
   description?: string
@@ -201,6 +210,7 @@ export interface Example {
   after: string
 }
 export interface FeedbackItem {
+  conversationVersionId?: Id | null
   feedbackId: Id
   type: string
   title: string
@@ -213,6 +223,7 @@ export interface FeedbackList {
   days: { date: string; feedbacks: FeedbackItem[] }[]
 }
 export interface FeedbackDetail {
+  conversationVersionId: Id | null
   feedbackId: Id
   type: string
   title: string
@@ -223,7 +234,7 @@ export interface FeedbackDetail {
   reaction?: Reaction | null
   sharing?: { status: string; version: number; sharedCaseId: Id | null }
   limitations?: string[]
-  evidences: { conversationId: Id; turnIndexes: number[] }[]
+  evidences: { conversationVersionId: Id; turnIndexes: number[] }[]
 }
 export interface Conversation {
   title: string

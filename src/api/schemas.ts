@@ -22,11 +22,20 @@ export const tokensSchema = z.object({
 })
 export const userSchema = z.object({ userId: id, name: z.string(), email: z.string() })
 export const loginSchema = tokensSchema.extend({ user: userSchema })
+export const capabilitiesSchema = z.object({
+  canViewOwnData: z.boolean(),
+  canViewTeamMetrics: z.boolean(),
+  canEditSettings: z.boolean(),
+  canEditGoals: z.boolean(),
+  canManageMembers: z.boolean(),
+  canManageSharedCases: z.boolean(),
+})
 export const teamsSchema = z.array(
   z.object({
     teamId: id,
     name: z.string(),
     myRole: role,
+    capabilities: capabilitiesSchema.optional(),
     description: z
       .string()
       .nullish()
