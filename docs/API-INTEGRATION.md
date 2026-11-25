@@ -1,5 +1,27 @@
 # API 통합 기록
 
+## 오류 원인 분석 — 2026-11-25
+
+### 확인된 사실과 유력 원인 구분
+
+- **분석 기준 저장 500:** 실제 요청은 v4 입력 제약과 맞고, Vercel 경유와 백엔드 직접 호출에서 실패했습니다. 버전은 0으로 유지됩니다. 실패 지점의 실제 예외는 서버 응답에 숨겨지며, GlobalExceptionHandler는 `[UnhandledException]`으로 스택을 기록합니다. 정확한 SQL·예외 원인 확정에는 해당 로그가 필요합니다.
+- **가장 유력한 후보는 DB 마이그레이션 불일치입니다.** updateSettings는 `nextVersion()`을 만들어 새 team_settings 행을 INSERT합니다. 이전 team_id 단독 UNIQUE가 남으면 version=0 행이 있는 팀에 version=1 행을 추가하지 못합니다. 저장소의 `migrate-team-settings-history.sql`은 바로 이 단독 UNIQUE를 찾아 제거하는 SQL을 포함합니다. 동일 현상만으로 해당 인덱스가 실제 남아 있다고 확정하지는 않습니다.
+- [BE PR #134](https://github.com/likelion-1team/BE/pull/134)는 배포·로컬 DB의 수동 이관 순서가 필수임을 명시합니다. `migrate-team-settings-v4.sql`의 조건 JSON·문자열 길이·기존 업무 유형 제약 변경도 확인 대상입니다. 다만 새 팀의 첫 저장 실패이므로, 기존 (team_id,name) 제약에 의한 _동일 이름 재저장_ 충돌보다는 team_settings 제약·필수 컬럼·INSERT 예외를 먼저 확인해야 합니다.
+- 신규 팀 생성과 기본 version=0 조회는 성공합니다. 이는 DB가 전부 끊긴 상태보다 저장의 특정 경로·스키마 제약 문제 쪽을 뒷받침하지만, 정상 트랜잭션 연결을 보장하는 근거는 아닙니다.
+- **팀원 TEAM 403:** 재확인한 실제 teams 응답은 canViewTeamMetrics=false이고, TEAM filter-options는 직접·프록시 모두 ROLE_FORBIDDEN입니다. [BE PR #161](https://github.com/likelion-1team/BE/pull/161)의 canViewTeamMetrics=true·팀원 TEAM 허용과 다릅니다. 소스 병합과 실행 배포의 권한 계약 차이가 확인되며, 실행 중인 정확한 SHA는 아직 확인하지 못했습니다. 기여자 부족은 200 SUPPRESSED가 기대되므로 이 403과 별개입니다.
+- **팀 목록 응답 오류:** 배열에서 페이지 객체로 바뀐 API와 FE 검증 스키마 불일치였습니다. 현재 배포 `35eee75`에서 수정하고 실계정 팀 진입으로 확인했습니다.
+- **업로드 차단·빈 이력:** 기준 version=0·taskType=null과 데이터 없음에 따른 상태입니다. 아직 업로드·분석이 실행되지 않아 Gemini 실패를 현재 원인으로 지목할 근거는 없습니다.
+- 이전 비존재 계정 로그인 500은 현재 401 INVALID_CREDENTIALS로 바뀌었으며 제공된 6계정은 로그인에 성공했습니다. 과거 장애 원인을 현재 설정 500과 동일하다고 보지 않습니다.
+
+### 확정에 필요한 최소 증거
+
+1. 2026-11-25 15:55:29 KST 전후 PUT `/api/v1/teams/5/settings`의 `[UnhandledException]` 스택과 가장 안쪽 원인. Duplicate entry/constraint name, Unknown column, JSON 변환 오류 등을 구분합니다.
+2. 프로젝트 `output/backend-settings-readonly-diagnostics.sql`로 실제 UNIQUE·컬럼·기준 버전을 조회합니다. 진단 파일은 읽기 전용입니다.
+3. 실행 중인 BE의 실제 빌드 SHA와 연결 DB를 확인합니다. 최신 develop은 `30f619c`이나 실행 서버의 SHA로 단정하지 않습니다.
+4. 결과에 맞춰 필요한 이관만 적용합니다. 이관 스크립트의 ADD COLUMN/DROP INDEX는 모두 멱등하지 않으므로 전체 스크립트를 무조건 재실행하면 안 됩니다.
+
+이 분석에서 운영 DB 접속·스키마 변경·BE 배포는 하지 않았습니다. 서버 로그와 DB 메타데이터에 직접 접근할 수 없어 위 후보의 최종 확정은 남아 있습니다.
+
 ## 실계정 시연 검증 — 2026-11-25 오후
 
 - 배포 코드 `35eee75`, 브랜치 `codex/fe-live-account-verification`. Vercel `dpl_4ThM6PeqSkkrEQyF5YTx8pQ7hu3E` production Ready. 공개 주소는 동일합니다.
