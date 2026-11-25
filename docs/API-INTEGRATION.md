@@ -1,5 +1,31 @@
 # API 통합 기록
 
+## 실계정 시연 검증 — 2026-11-25 오후
+
+- 배포 코드 `35eee75`, 브랜치 `codex/fe-live-account-verification`. Vercel `dpl_4ThM6PeqSkkrEQyF5YTx8pQ7hu3E` production Ready. 공개 주소는 동일합니다.
+- 실제 팀 목록이 `{items,page,size,total}`로 변경돼 기존 FE가 팀 진입 전에 응답 오류를 내던 문제를 재현·수정했습니다. 팀·팀원 목록은 모든 페이지를 읽습니다.
+- 새 대시보드 filter-options 경로, settingsVersion·완료 주간 요청, 본인 확인 지표와 SUPPRESSED·표본 부족·미측정 상태를 반영했습니다. 숨긴 수치·표본을 0으로 만들지 않습니다.
+- 업로드 multipart에 settingsVersion을 추가하고 READY/CONSUMED/EXPIRED 및 새 메타데이터 응답을 지원합니다. 업로드 이력에 이제 analysisId가 제공돼 새로고침 후에도 해당 분석으로 연결합니다. 오전 기록의 복구 제한은 이 서버 계약에서 해소됐습니다.
+- 개인 피드백의 평탄 목록, 메시지 ID 기반 근거, 공유 버전 기반 철회 및 sharedCaseId 기반 가이드 경로를 반영했습니다. 새 공유 승인·실제 결과 저장 화면은 이번 보완에서 활성화하지 않았습니다.
+- lint·타입 검사·빌드 통과. 단위/컴포넌트 28개와 Playwright 28개, 합계 56개 통과. 모의 API 회귀와 아래 실계정 확인을 구분합니다. 공개 OpenAPI 필수 경로 16개 검사 통과.
+
+### 실제 확인한 범위
+
+1. 제공받은 기본·추가 계정 6개 모두 실제 API 로그인 성공. 비밀번호는 Git·소스·이 문서에 저장하지 않았습니다. Windows DPAPI CurrentUser로 암호화하고 사용자/SYSTEM만 파일에 접근하도록 제한했습니다.
+2. Chrome에서 팀장·기본 팀원 로그인, 로그아웃, 새로고침 뒤 쿠키 세션 복원 확인.
+3. 사용자 선택에 따라 별도 팀 `시연 검증 전용 · 2026-11-25`(teamId=5) 생성, 기본 팀원 추가 성공. 팀장·팀원 각 역할과 명단 2명 확인. 기존 팀 4의 기준·회원·수치는 변경하지 않았습니다.
+4. 팀원은 설정 읽기만 가능하고 수정·팀원 관리 메뉴가 없습니다. 팀장 URL로 직접 이동해도 실제 팀원 경로로 보정됩니다.
+5. 새 팀의 빈 업로드 이력·개인 피드백·개선 가이드는 오류 대신 빈 상태로 표시됩니다. 기준 미설정 시 업로드를 차단합니다.
+6. 현재 배포 서버는 팀원의 TEAM filter-options 요청에 403 ROLE_FORBIDDEN을 반환합니다. 최신 develop `30f619c`는 전원 조회 변경을 포함하지만 배포 여부를 소스만으로 단정하지 않습니다.
+
+### 진행을 막는 백엔드 오류
+
+- Chrome에서 새 팀의 정상 분석 기준 저장 요청이 500입니다. 백엔드 직접 PUT `/api/v1/teams/5/settings`에서도 **2026-11-25 15:55:29 KST, 500 INTERNAL_SERVER_ERROR**로 재현됐습니다. Vercel만의 문제는 아닙니다.
+- 요청은 expectedVersion=0, 단일 taskType·세 조건 배열, 대상 2026-11-01~30, 온보딩 11-16, 대상 20건입니다. 재조회한 version은 0→0이며 taskType과 기간은 미설정 상태입니다. FE는 실패를 성공으로 표시하지 않고 입력을 보존합니다.
+- 원인은 서버 로그 없이 확정하지 않았습니다. version 1 생성 시 DB 제약과 실제 마이그레이션 상태를 점검해야 합니다. 특히 `migrate-team-settings-history.sql`의 기존 team_id 단독 UNIQUE 제거, `migrate-team-settings-initial-version.sql`, `migrate-team-settings-v4.sql` 적용 여부를 확인할 필요가 있습니다. 이는 코드 대조에 따른 점검 후보이며 확정 원인이 아닙니다.
+- 위 선행 오류로 실제 파일 업로드·분석 실행·피드백 생성·반응·공유·가이드 지정과 5명 기여 공개 정책을 끝까지 검증하지 못했습니다. 가입 인원 6명만으로 기여자 5명 조건을 충족했다고 간주하지 않습니다.
+- 합성 대화 파일 2건은 프로젝트 `output/conversations-demo-synthetic-2026-11-25.json`에 준비했으며 서버에는 업로드하지 않았습니다. 오류 요청·응답 증거는 `tmp/real-demo-settings-failure.json`, 화면은 `output/real-demo-settings-500.jpg`입니다. 인증 토큰·비밀번호는 포함하지 않습니다.
+
 ## 프로덕션 재배포 — 2026-11-25
 
 - 공개 주소: https://likelion-1team-fe.vercel.app
