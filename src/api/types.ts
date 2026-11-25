@@ -223,6 +223,7 @@ export interface FeedbackList {
   days: { date: string; feedbacks: FeedbackItem[] }[]
 }
 export interface FeedbackDetail {
+  itemId?: Id | null
   conversationVersionId: Id | null
   feedbackId: Id
   type: string

@@ -147,3 +147,10 @@ export const share = z.object({
   shareVersion: count,
   sharedCaseId: id.nullable(),
 })
+export const outcome = z.object({
+  itemId: id,
+  version: count,
+  outcome: z.enum(['SUCCESS', 'FAILURE', 'UNKNOWN']),
+  source: z.string(),
+  assessedAt: z.string(),
+})

@@ -65,6 +65,28 @@ it('preserves null trend sample size when privacy suppression applies', async ()
     status: 'SUPPRESSED',
   })
 })
+it('records a confirmed outcome against the current confirmation version', async () => {
+  vi.mocked(fetch).mockResolvedValue(
+    json({
+      itemId: 31,
+      version: 1,
+      outcome: 'SUCCESS',
+      source: 'SELF_REPORT',
+      assessedAt: '2026-11-24T10:20:00+09:00',
+    }),
+  )
+  await expect(
+    api.outcome(31, { expectedVersion: 0, outcome: 'SUCCESS', note: '보고서에 사용' }),
+  ).resolves.toMatchObject({ version: 1, outcome: 'SUCCESS' })
+  const [url, init] = vi.mocked(fetch).mock.calls[0]
+  expect(String(url)).toContain('/analysis-items/31/outcome')
+  expect(init?.method).toBe('PUT')
+  expect(JSON.parse(String(init?.body))).toEqual({
+    expectedVersion: 0,
+    outcome: 'SUCCESS',
+    note: '보고서에 사용',
+  })
+})
 it('uploads settingsVersion with the file and accepts metadata rather than old candidate arrays', async () => {
   vi.mocked(fetch).mockResolvedValue(
     json({

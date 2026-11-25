@@ -412,5 +412,13 @@ export const api = {
       method: enabled ? 'PUT' : 'DELETE',
       ...(enabled ? { json: { expectedShareVersion: shareVersion } } : {}),
     }),
+  outcome: (
+    itemId: Id,
+    body: { expectedVersion: number; outcome: 'SUCCESS' | 'FAILURE' | 'UNKNOWN'; note?: string },
+  ) =>
+    request<{ version: number; outcome: 'SUCCESS' | 'FAILURE' | 'UNKNOWN' }>(
+      `/analysis-items/${itemId}/outcome`,
+      { method: 'PUT', json: body, validate: live.outcome.parse },
+    ),
 }
 export type { Tokens }

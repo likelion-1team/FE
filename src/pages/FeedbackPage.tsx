@@ -206,7 +206,10 @@ function FeedbackDetailContent() {
     [revoke, setRevoke] = useState(false),
     [revoked, setRevoked] = useState(false),
     [copyMessage, setCopyMessage] = useState(''),
-    [copyError, setCopyError] = useState(false)
+    [copyError, setCopyError] = useState(false),
+    [outcomeVersion, setOutcomeVersion] = useState(0),
+    [outcomeNote, setOutcomeNote] = useState(''),
+    [outcomeMessage, setOutcomeMessage] = useState('')
   const currentReaction =
     reactionOverride === undefined
       ? query.data && 'reaction' in query.data
@@ -234,6 +237,25 @@ function FeedbackDetailContent() {
       setReaction(value)
       patchList({ myReaction: value })
       setReason('')
+    },
+  })
+  const saveOutcome = useMutation({
+    mutationFn: (outcome: 'SUCCESS' | 'FAILURE' | 'UNKNOWN') => {
+      if (query.data?.itemId == null) throw new Error('확인할 분석 항목이 없습니다.')
+      return api.outcome(query.data.itemId, {
+        expectedVersion: outcomeVersion,
+        outcome,
+        ...(outcomeNote.trim() ? { note: outcomeNote.trim() } : {}),
+      })
+    },
+    onSuccess: (saved) => {
+      setOutcomeVersion(saved.version)
+      setOutcomeNote('')
+      setOutcomeMessage(
+        saved.outcome === 'UNKNOWN'
+          ? '결과를 모름으로 저장했습니다. 성공률 분모에는 넣지 않습니다.'
+          : '업무 결과를 저장했습니다. 성공률은 이 확인값으로 계산됩니다.',
+      )
     },
   })
   const share = useMutation({
@@ -368,15 +390,42 @@ function FeedbackDetailContent() {
         <ErrorMessage error={reaction.error} />
       </Card>
       <div className="notice">
-        <h2>AI 추정과 실제 결과를 구분해주세요</h2>
-        <p>업무 결과·재작업 유형·실제 사용 여부 확인과 대화 삭제는 준비 중입니다.</p>
-        <div className="row">
-          {['업무 결과 확인', '재작업 유형 확인', '실제로 사용했어요', '대화 삭제'].map((label) => (
-            <Button key={label} disabled title="기능 준비 중">
-              {label}
-            </Button>
-          ))}
-        </div>
+        <h2>업무가 실제로 성공했는지 확인해주세요</h2>
+        <p>성공률은 여기서 확인한 성공·실패만 분모로 씁니다. 모름은 저장되지만 분모에서 빠집니다.</p>
+        {data.itemId == null ? (
+          <p>분석 항목이 없는 이전 피드백은 결과를 확인할 수 없습니다.</p>
+        ) : (
+          <>
+            <Field label="확인 메모 · 선택">
+              <textarea
+                maxLength={500}
+                value={outcomeNote}
+                onChange={(e) => setOutcomeNote(e.target.value)}
+                placeholder="본인만 볼 수 있는 메모입니다."
+              />
+            </Field>
+            <div className="row">
+              {(
+                [
+                  ['SUCCESS', '성공'],
+                  ['FAILURE', '실패'],
+                  ['UNKNOWN', '모름'],
+                ] as const
+              ).map(([value, label]) => (
+                <Button
+                  key={value}
+                  disabled={saveOutcome.isPending}
+                  onClick={() => saveOutcome.mutate(value)}
+                >
+                  {label}
+                </Button>
+              ))}
+            </div>
+            {outcomeMessage && <Notice>{outcomeMessage}</Notice>}
+            <ErrorMessage error={saveOutcome.error} />
+          </>
+        )}
+        <p>재작업 유형 확인, 실제 사용 여부, 대화 삭제는 준비 중입니다.</p>
       </div>
       {original !== null && (
         <OriginalConversation
