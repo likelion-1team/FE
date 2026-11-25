@@ -87,6 +87,26 @@ it('records a confirmed outcome against the current confirmation version', async
     note: '보고서에 사용',
   })
 })
+it('records an error-correction rework so only that type counts as the numerator', async () => {
+  vi.mocked(fetch).mockResolvedValue(
+    json({
+      itemId: 31,
+      version: 1,
+      type: 'ERROR_CORRECTION',
+      source: 'SELF_REPORT',
+      assessedAt: '2026-11-24T10:20:00+09:00',
+    }),
+  )
+  await expect(
+    api.rework(31, { expectedVersion: 0, type: 'ERROR_CORRECTION' }),
+  ).resolves.toMatchObject({ version: 1, type: 'ERROR_CORRECTION' })
+  const [url, init] = vi.mocked(fetch).mock.calls[0]
+  expect(String(url)).toContain('/analysis-items/31/rework-assessment')
+  expect(JSON.parse(String(init?.body))).toEqual({
+    expectedVersion: 0,
+    type: 'ERROR_CORRECTION',
+  })
+})
 it('uploads settingsVersion with the file and accepts metadata rather than old candidate arrays', async () => {
   vi.mocked(fetch).mockResolvedValue(
     json({

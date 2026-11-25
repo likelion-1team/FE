@@ -154,3 +154,18 @@ export const outcome = z.object({
   source: z.string(),
   assessedAt: z.string(),
 })
+export const reworkTypes = [
+  'ERROR_CORRECTION',
+  'REQUIREMENT_CHANGE',
+  'EXPRESSION_REFINEMENT',
+  'EXPLORATION',
+  'NONE',
+  'UNKNOWN',
+] as const
+export const rework = z.object({
+  itemId: id,
+  version: count,
+  type: z.enum(reworkTypes),
+  source: z.string(),
+  assessedAt: z.string(),
+})

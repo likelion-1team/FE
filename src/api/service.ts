@@ -420,5 +420,13 @@ export const api = {
       `/analysis-items/${itemId}/outcome`,
       { method: 'PUT', json: body, validate: live.outcome.parse },
     ),
+  rework: (
+    itemId: Id,
+    body: { expectedVersion: number; type: (typeof live.reworkTypes)[number]; note?: string },
+  ) =>
+    request<{ version: number; type: (typeof live.reworkTypes)[number] }>(
+      `/analysis-items/${itemId}/rework-assessment`,
+      { method: 'PUT', json: body, validate: live.rework.parse },
+    ),
 }
 export type { Tokens }

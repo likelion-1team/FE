@@ -20,6 +20,15 @@ import {
   today,
 } from '../components/ui'
 
+const reworkOptions = [
+  ['ERROR_CORRECTION', '오류 수정'],
+  ['REQUIREMENT_CHANGE', '요구 변경'],
+  ['EXPRESSION_REFINEMENT', '표현 개선'],
+  ['EXPLORATION', '탐색·추가 질문'],
+  ['NONE', '다시 처리하지 않음'],
+  ['UNKNOWN', '구분할 수 없음'],
+] as const
+
 export const feedbackTypes = [
   { value: '', label: '모든 피드백 유형' },
   { value: 'MISSING_CONTEXT', label: '맥락 누락' },
@@ -209,7 +218,11 @@ function FeedbackDetailContent() {
     [copyError, setCopyError] = useState(false),
     [outcomeVersion, setOutcomeVersion] = useState(0),
     [outcomeNote, setOutcomeNote] = useState(''),
-    [outcomeMessage, setOutcomeMessage] = useState('')
+    [outcomeMessage, setOutcomeMessage] = useState(''),
+    [reworkVersion, setReworkVersion] = useState(0),
+    [reworkType, setReworkType] = useState<(typeof reworkOptions)[number][0]>('ERROR_CORRECTION'),
+    [reworkNote, setReworkNote] = useState(''),
+    [reworkMessage, setReworkMessage] = useState('')
   const currentReaction =
     reactionOverride === undefined
       ? query.data && 'reaction' in query.data
@@ -255,6 +268,27 @@ function FeedbackDetailContent() {
         saved.outcome === 'UNKNOWN'
           ? '결과를 모름으로 저장했습니다. 성공률 분모에는 넣지 않습니다.'
           : '업무 결과를 저장했습니다. 성공률은 이 확인값으로 계산됩니다.',
+      )
+    },
+  })
+  const saveRework = useMutation({
+    mutationFn: () => {
+      if (query.data?.itemId == null) throw new Error('확인할 분석 항목이 없습니다.')
+      return api.rework(query.data.itemId, {
+        expectedVersion: reworkVersion,
+        type: reworkType,
+        ...(reworkNote.trim() ? { note: reworkNote.trim() } : {}),
+      })
+    },
+    onSuccess: (saved) => {
+      setReworkVersion(saved.version)
+      setReworkNote('')
+      setReworkMessage(
+        saved.type === 'UNKNOWN'
+          ? '재작업 이유를 모름으로 저장했습니다. 오류 재작업률에서는 제외됩니다.'
+          : saved.type === 'ERROR_CORRECTION'
+            ? '오류 수정으로 저장했습니다. 오류 재작업률의 분자에 포함됩니다.'
+            : '재작업 이유를 저장했습니다. 분모에만 포함됩니다.',
       )
     },
   })
@@ -425,7 +459,40 @@ function FeedbackDetailContent() {
             <ErrorMessage error={saveOutcome.error} />
           </>
         )}
-        <p>재작업 유형 확인, 실제 사용 여부, 대화 삭제는 준비 중입니다.</p>
+        <h2>다시 요청한 이유를 골라주세요</h2>
+        <p>오류 재작업률의 분자는 오류 수정만 셉니다. 오류 수정이 있었다면 그 이유를 우선 골라주세요.</p>
+        {data.itemId == null ? (
+          <p>분석 항목이 없는 이전 피드백은 재작업 이유를 확인할 수 없습니다.</p>
+        ) : (
+          <>
+            <Field label="재작업 이유">
+              <select
+                value={reworkType}
+                onChange={(e) => setReworkType(e.target.value as (typeof reworkOptions)[number][0])}
+              >
+                {reworkOptions.map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="이유 메모 · 선택">
+              <textarea
+                maxLength={500}
+                value={reworkNote}
+                onChange={(e) => setReworkNote(e.target.value)}
+                placeholder="본인만 볼 수 있는 메모입니다."
+              />
+            </Field>
+            <Button disabled={saveRework.isPending} onClick={() => saveRework.mutate()}>
+              재작업 이유 저장
+            </Button>
+            {reworkMessage && <Notice>{reworkMessage}</Notice>}
+            <ErrorMessage error={saveRework.error} />
+          </>
+        )}
+        <p>실제 사용 여부와 대화 삭제는 준비 중입니다.</p>
       </div>
       {original !== null && (
         <OriginalConversation
