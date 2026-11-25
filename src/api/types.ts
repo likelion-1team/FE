@@ -251,6 +251,24 @@ export interface SharePreview {
     example: Example
   }
 }
+export interface OutcomeAssessment {
+  outcome: 'SUCCESS' | 'FAILURE' | 'UNKNOWN'
+  source: string
+  version: number
+  assessedAt: string
+}
+export interface ReworkAssessment {
+  type:
+    | 'ERROR_CORRECTION'
+    | 'REQUIREMENT_CHANGE'
+    | 'EXPRESSION_REFINEMENT'
+    | 'EXPLORATION'
+    | 'NONE'
+    | 'UNKNOWN'
+  source: string
+  version: number
+  assessedAt: string
+}
 export interface FeedbackDetail {
   itemId?: Id | null
   conversationVersionId: Id | null
@@ -263,6 +281,9 @@ export interface FeedbackDetail {
   example: Example
   reaction?: Reaction | null
   sharing?: { status: string; version: number; sharedCaseId: Id | null }
+  outcomeAssessment?: OutcomeAssessment | null
+  reworkAssessment?: ReworkAssessment | null
+  aiAssessment?: { outcome: string | null; reworkType: string | null } | null
   limitations?: string[]
   evidences: { conversationVersionId: Id; turnIndexes: number[] }[]
 }

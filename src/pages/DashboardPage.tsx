@@ -132,6 +132,22 @@ function goalRatio(value: number | null) {
 function goalTokens(value: number | null) {
   return value == null ? '미설정' : new Intl.NumberFormat('ko-KR').format(value)
 }
+function goalBaseline(
+  key: string,
+  goals?: {
+    successRateMin: number | null
+    errorReworkRateMax: number | null
+    tokensPerSuccessMax: number | null
+  },
+) {
+  if (!goals) return null
+  if (key === 'successRate' && goals.successRateMin != null) return `목표 ${goalRatio(goals.successRateMin)} 이상`
+  if (key === 'reworkRate' && goals.errorReworkRateMax != null)
+    return `목표 ${goalRatio(goals.errorReworkRateMax)} 이하`
+  if (key === 'tokensPerSuccess' && goals.tokensPerSuccessMax != null)
+    return `목표 ${goalTokens(goals.tokensPerSuccessMax)} 이하`
+  return null
+}
 function SubmissionsPanel({ teamId }: { teamId: string }) {
   const submissions = useQuery({
     queryKey: ['team', teamId, 'submissions'],
@@ -159,6 +175,7 @@ function SubmissionsPanel({ teamId }: { teamId: string }) {
                 {goalTokens(submissions.data.targetCount)}
               </p>
               <p>커버리지 {goalRatio(submissions.data.coverageRatio)}</p>
+              <p className="muted">선택한 대화 비율이며, 회사 전체 업무를 대표하지 않습니다.</p>
             </>
           )}
         </>
@@ -275,6 +292,10 @@ export function DashboardPage({ scope = 'ME' }: { scope?: 'ME' | 'TEAM' }) {
 }
 function DashboardContent({ scope }: { scope: 'ME' | 'TEAM' }) {
   const { team, teamId, leader, base } = useWorkspace()
+  const goals = useQuery({
+    queryKey: ['team', teamId, 'goals'],
+    queryFn: ({ signal }) => api.goals(teamId, signal),
+  })
   const options = useQuery({
     queryKey: ['team', teamId, 'options', scope],
     queryFn: ({ signal }) => api.options(teamId, signal, scope),
@@ -430,10 +451,12 @@ function DashboardContent({ scope }: { scope: 'ME' | 'TEAM' }) {
             <div className="kpi-grid">
               {metrics.map((m) => {
                 const value = kpis.data[m.key]
+                const baseline = goalBaseline(m.key, goals.data)
                 return (
                   <Card key={m.key}>
                     <p>{m.title}</p>
                     <strong className="kpi-value">{formatNumber(value?.value, m.percent)}</strong>
+                    {baseline && <small>{baseline}</small>}
                     <small>
                       {value?.value == null
                         ? metricStatus(value?.status)

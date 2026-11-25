@@ -118,6 +118,35 @@ export const feedback = z.object({
   limitations: z.array(z.string()),
   reaction: z.enum(['HELPFUL', 'NOT_APPLICABLE']).nullable(),
   sharing: z.object({ status: z.string(), version: count, sharedCaseId: id.nullable() }),
+  outcomeAssessment: z
+    .object({
+      outcome: z.enum(['SUCCESS', 'FAILURE', 'UNKNOWN']),
+      source: z.string(),
+      version: count,
+      assessedAt: z.string(),
+    })
+    .nullable()
+    .optional(),
+  reworkAssessment: z
+    .object({
+      type: z.enum([
+        'ERROR_CORRECTION',
+        'REQUIREMENT_CHANGE',
+        'EXPRESSION_REFINEMENT',
+        'EXPLORATION',
+        'NONE',
+        'UNKNOWN',
+      ]),
+      source: z.string(),
+      version: count,
+      assessedAt: z.string(),
+    })
+    .nullable()
+    .optional(),
+  aiAssessment: z
+    .object({ outcome: z.string().nullable(), reworkType: z.string().nullable() })
+    .nullable()
+    .optional(),
 })
 export const conversation = z.object({
   conversationVersionId: id,

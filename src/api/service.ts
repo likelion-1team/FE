@@ -17,7 +17,9 @@ import type {
   Kpis,
   LoginResult,
   Member,
+  OutcomeAssessment,
   Reaction,
+  ReworkAssessment,
   Settings,
   SharePreview,
   SettingsInput,
@@ -342,13 +344,15 @@ export const api = {
         },
       },
     ),
-  revokeShare: (id: Id, expectedShareVersion?: number) =>
-    request<{ isShared: boolean }>(`/feedbacks/${id}/share`, {
+  revokeShare: (id: Id) =>
+    request<{ isShared: boolean; shareVersion: number }>(`/feedbacks/${id}/share`, {
       method: 'PATCH',
-      json: { shared: false, expectedShareVersion },
+      json: { shared: false },
       validate: (value) => {
         const raw = release(value, 'shared', live.share, schemas.shareSchema)
-        return 'shared' in raw ? { isShared: raw.shared } : raw
+        return 'shared' in raw
+          ? { isShared: raw.shared, shareVersion: raw.shareVersion }
+          : { isShared: raw.isShared, shareVersion: 0 }
       },
     }),
   conversationVersion: (id: Id, feedbackId: string, signal?: AbortSignal) =>
@@ -462,7 +466,7 @@ export const api = {
     itemId: Id,
     body: { expectedVersion: number; outcome: 'SUCCESS' | 'FAILURE' | 'UNKNOWN'; note?: string },
   ) =>
-    request<{ version: number; outcome: 'SUCCESS' | 'FAILURE' | 'UNKNOWN' }>(
+    request<OutcomeAssessment>(
       `/analysis-items/${itemId}/outcome`,
       { method: 'PUT', json: body, validate: live.outcome.parse },
     ),
@@ -470,7 +474,7 @@ export const api = {
     itemId: Id,
     body: { expectedVersion: number; type: (typeof live.reworkTypes)[number]; note?: string },
   ) =>
-    request<{ version: number; type: (typeof live.reworkTypes)[number] }>(
+    request<ReworkAssessment>(
       `/analysis-items/${itemId}/rework-assessment`,
       { method: 'PUT', json: body, validate: live.rework.parse },
     ),

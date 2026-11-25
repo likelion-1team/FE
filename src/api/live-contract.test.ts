@@ -348,3 +348,40 @@ it('accepts nullable v3 source ids without manufacturing a source reference', as
   )
   expect((await api.feedback('11')).evidences).toEqual([])
 })
+it('keeps the saved confirmation version instead of treating every visit as the first', async () => {
+  vi.mocked(fetch).mockResolvedValue(
+    json({
+      feedbackId: 11,
+      itemId: 31,
+      conversationId: 21,
+      conversationVersionId: 61,
+      type: 'OUTPUT_FORMAT',
+      title: '형식',
+      problem: '문제',
+      causes: [],
+      improvement: '개선',
+      example: { before: '전', after: '후' },
+      evidenceMessageIds: [],
+      limitations: [],
+      reaction: null,
+      sharing: { status: 'NOT_SHARED', version: 2, sharedCaseId: null },
+      aiAssessment: { outcome: 'SUCCESS', reworkType: 'REQUIREMENT_CHANGE' },
+      outcomeAssessment: {
+        outcome: 'FAILURE',
+        source: 'SELF_REPORT',
+        version: 3,
+        assessedAt: '2026-11-24T10:20:00+09:00',
+      },
+      reworkAssessment: null,
+    }),
+  )
+  const detail = await api.feedback('11')
+  expect(detail.outcomeAssessment).toMatchObject({ outcome: 'FAILURE', version: 3 })
+  expect(detail.aiAssessment).toMatchObject({ outcome: 'SUCCESS' })
+  expect(detail.reworkAssessment).toBeNull()
+})
+it('revokes a share without sending a version that could block it', async () => {
+  vi.mocked(fetch).mockResolvedValue(json({ shared: false, shareVersion: 4, sharedCaseId: null }))
+  await expect(api.revokeShare(11)).resolves.toMatchObject({ isShared: false, shareVersion: 4 })
+  expect(JSON.parse(String(vi.mocked(fetch).mock.calls[0][1]?.body))).toEqual({ shared: false })
+})

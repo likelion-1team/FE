@@ -2,7 +2,15 @@ import { useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api/service'
-import type { FeedbackItem, FeedbackList, Id, Reaction, SharePreview } from '../api/types'
+import type {
+  FeedbackItem,
+  FeedbackList,
+  Id,
+  OutcomeAssessment,
+  Reaction,
+  ReworkAssessment,
+  SharePreview,
+} from '../api/types'
 import { useWorkspace } from '../components/Workspace'
 import {
   Button,
@@ -27,6 +35,10 @@ const reworkOptions = [
   ['NONE', '다시 처리하지 않음'],
   ['UNKNOWN', '구분할 수 없음'],
 ] as const
+const outcomeLabels = { SUCCESS: '성공', FAILURE: '실패', UNKNOWN: '모름' } as const
+function reworkLabel(type: string) {
+  return reworkOptions.find(([value]) => value === type)?.[1] ?? type
+}
 
 export const feedbackTypes = [
   { value: '', label: '모든 피드백 유형' },
@@ -215,15 +227,16 @@ function FeedbackDetailContent() {
     [revoked, setRevoked] = useState(false),
     [copyMessage, setCopyMessage] = useState(''),
     [copyError, setCopyError] = useState(false),
-    [outcomeVersion, setOutcomeVersion] = useState(0),
+    [savedOutcome, setSavedOutcome] = useState<OutcomeAssessment | null>(null),
     [outcomeNote, setOutcomeNote] = useState(''),
     [outcomeMessage, setOutcomeMessage] = useState(''),
-    [reworkVersion, setReworkVersion] = useState(0),
-    [reworkType, setReworkType] = useState<(typeof reworkOptions)[number][0]>('ERROR_CORRECTION'),
+    [savedRework, setSavedRework] = useState<ReworkAssessment | null>(null),
+    [reworkType, setReworkType] = useState<(typeof reworkOptions)[number][0] | null>(null),
     [reworkNote, setReworkNote] = useState(''),
     [reworkMessage, setReworkMessage] = useState(''),
     [preview, setPreview] = useState<SharePreview | null>(null),
-    [shareMessage, setShareMessage] = useState('')
+    [shareMessage, setShareMessage] = useState(''),
+    [shareVersionOverride, setShareVersionOverride] = useState<number | null>(null)
   const currentReaction =
     reactionOverride === undefined
       ? query.data && 'reaction' in query.data
@@ -253,36 +266,41 @@ function FeedbackDetailContent() {
       setReason('')
     },
   })
+  const outcomeAssessment = savedOutcome ?? query.data?.outcomeAssessment ?? null
+  const reworkAssessment = savedRework ?? query.data?.reworkAssessment ?? null
+  const selectedRework = reworkType ?? reworkAssessment?.type ?? 'ERROR_CORRECTION'
   const saveOutcome = useMutation({
     mutationFn: (outcome: 'SUCCESS' | 'FAILURE' | 'UNKNOWN') => {
       if (query.data?.itemId == null) throw new Error('확인할 분석 항목이 없습니다.')
       return api.outcome(query.data.itemId, {
-        expectedVersion: outcomeVersion,
+        expectedVersion: outcomeAssessment?.version ?? 0,
         outcome,
         ...(outcomeNote.trim() ? { note: outcomeNote.trim() } : {}),
       })
     },
-    onSuccess: (saved) => {
-      setOutcomeVersion(saved.version)
+    onSuccess: async (saved) => {
+      setSavedOutcome(saved)
       setOutcomeNote('')
       setOutcomeMessage(
         saved.outcome === 'UNKNOWN'
           ? '결과를 모름으로 저장했습니다. 성공률 분모에는 넣지 않습니다.'
           : '업무 결과를 저장했습니다. 성공률은 이 확인값으로 계산됩니다.',
       )
+      await client.invalidateQueries({ queryKey: ['team', teamId, 'feedback', feedbackId] })
     },
   })
   const saveRework = useMutation({
     mutationFn: () => {
       if (query.data?.itemId == null) throw new Error('확인할 분석 항목이 없습니다.')
       return api.rework(query.data.itemId, {
-        expectedVersion: reworkVersion,
-        type: reworkType,
+        expectedVersion: reworkAssessment?.version ?? 0,
+        type: selectedRework,
         ...(reworkNote.trim() ? { note: reworkNote.trim() } : {}),
       })
     },
-    onSuccess: (saved) => {
-      setReworkVersion(saved.version)
+    onSuccess: async (saved) => {
+      setSavedRework(saved)
+      setReworkType(saved.type)
       setReworkNote('')
       setReworkMessage(
         saved.type === 'UNKNOWN'
@@ -291,6 +309,7 @@ function FeedbackDetailContent() {
             ? '오류 수정으로 저장했습니다. 오류 재작업률의 분자에 포함됩니다.'
             : '재작업 이유를 저장했습니다. 분모에만 포함됩니다.',
       )
+      await client.invalidateQueries({ queryKey: ['team', teamId, 'feedback', feedbackId] })
     },
   })
   const previewShare = useMutation({
@@ -304,7 +323,7 @@ function FeedbackDetailContent() {
     mutationFn: () => {
       if (!preview) throw new Error('공유 미리보기가 없습니다.')
       return api.approveShare(feedbackId, {
-        expectedShareVersion: query.data?.sharing?.version ?? 0,
+        expectedShareVersion: shareVersionOverride ?? query.data?.sharing?.version ?? 0,
         previewId: preview.previewId,
         previewVersion: preview.previewVersion,
       })
@@ -319,9 +338,10 @@ function FeedbackDetailContent() {
     },
   })
   const share = useMutation({
-    mutationFn: () => api.revokeShare(feedbackId, query.data?.sharing?.version),
-    onSuccess: async () => {
+    mutationFn: () => api.revokeShare(feedbackId),
+    onSuccess: async (saved) => {
       setRevoked(true)
+      setShareVersionOverride(saved.shareVersion)
       setRevoke(false)
       patchList({ isShared: false })
       await client.invalidateQueries({ queryKey: ['team', teamId, 'guides'] })
@@ -341,6 +361,8 @@ function FeedbackDetailContent() {
   if (query.isPending) return <Loading />
   if (query.isError) return <ErrorState error={query.error} retry={() => void query.refetch()} />
   const data = query.data
+  const sharedNow =
+    !revoked && (data.sharing ? data.sharing.status === 'SHARED' : item?.isShared === true)
   return (
     <>
       <PageTitle title="피드백 상세" />
@@ -387,8 +409,7 @@ function FeedbackDetailContent() {
           <h3>예상 절감량</h3>
           <strong className="success">미측정</strong>
           <p>검증된 절감 근거가 없습니다.</p>
-          {!revoked &&
-            !(data.sharing ? data.sharing.status === 'SHARED' : item?.isShared === true) && (
+          {!sharedNow && (
               <>
                 <p>
                   새 공유는 가려진 미리보기를 확인한 뒤에만 승인됩니다. 미리보기는 30분 동안, 한 번만
@@ -401,8 +422,7 @@ function FeedbackDetailContent() {
                 {shareMessage && <Notice>{shareMessage}</Notice>}
               </>
             )}
-          {!revoked &&
-            (data.sharing ? data.sharing.status === 'SHARED' : item?.isShared === true) && (
+          {sharedNow && (
               <Button
                 onClick={() => {
                   share.reset()
@@ -412,7 +432,9 @@ function FeedbackDetailContent() {
                 기존 공유 철회
               </Button>
             )}
-          {revoked && <Notice>공유를 철회했습니다.</Notice>}
+          {revoked && (
+            <Notice>공유를 철회했습니다. 다시 공유하려면 새 미리보기가 필요합니다.</Notice>
+          )}
         </Card>
       </div>
       <div className="two-col">
@@ -463,6 +485,20 @@ function FeedbackDetailContent() {
       <div className="notice">
         <h2>업무가 실제로 성공했는지 확인해주세요</h2>
         <p>성공률은 여기서 확인한 성공·실패만 분모로 씁니다. 모름은 저장되지만 분모에서 빠집니다.</p>
+        {data.aiAssessment?.outcome && (
+          <p className="muted">
+            AI 추정은 {outcomeLabels[data.aiAssessment.outcome as keyof typeof outcomeLabels] ?? data.aiAssessment.outcome}
+            입니다. 아래 저장값과는 따로 둡니다.
+          </p>
+        )}
+        {outcomeAssessment ? (
+          <p>
+            저장된 본인 확인 {outcomeLabels[outcomeAssessment.outcome]} · 버전{' '}
+            {outcomeAssessment.version}
+          </p>
+        ) : (
+          <p>아직 본인 확인이 없습니다.</p>
+        )}
         {data.itemId == null ? (
           <p>분석 항목이 없는 이전 피드백은 결과를 확인할 수 없습니다.</p>
         ) : (
@@ -498,13 +534,25 @@ function FeedbackDetailContent() {
         )}
         <h2>다시 요청한 이유를 골라주세요</h2>
         <p>오류 재작업률의 분자는 오류 수정만 셉니다. 오류 수정이 있었다면 그 이유를 우선 골라주세요.</p>
+        {data.aiAssessment?.reworkType && (
+          <p className="muted">
+            AI 추정 이유는 {reworkLabel(data.aiAssessment.reworkType)}입니다. 저장값과는 따로 둡니다.
+          </p>
+        )}
+        {reworkAssessment ? (
+          <p>
+            저장된 재작업 이유 {reworkLabel(reworkAssessment.type)} · 버전 {reworkAssessment.version}
+          </p>
+        ) : (
+          <p>아직 재작업 이유를 확인하지 않았습니다.</p>
+        )}
         {data.itemId == null ? (
           <p>분석 항목이 없는 이전 피드백은 재작업 이유를 확인할 수 없습니다.</p>
         ) : (
           <>
             <Field label="재작업 이유">
               <select
-                value={reworkType}
+                value={selectedRework}
                 onChange={(e) => setReworkType(e.target.value as (typeof reworkOptions)[number][0])}
               >
                 {reworkOptions.map(([value, label]) => (
