@@ -222,6 +222,13 @@ export interface FeedbackItem {
 export interface FeedbackList {
   days: { date: string; feedbacks: FeedbackItem[] }[]
 }
+export interface TeamGoals {
+  version: number
+  successRateMin: number | null
+  errorReworkRateMax: number | null
+  tokensPerSuccessMax: number | null
+  updatedAt: string | null
+}
 export interface SharePreview {
   previewId: Id
   previewVersion: number

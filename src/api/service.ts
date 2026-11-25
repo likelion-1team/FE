@@ -23,6 +23,7 @@ import type {
   SettingsInput,
   SharedCase,
   Team,
+  TeamGoals,
   Tokens,
   Trends,
   Upload,
@@ -434,6 +435,22 @@ export const api = {
     request(`/teams/${teamId}/guides/${id}`, {
       method: enabled ? 'PUT' : 'DELETE',
       ...(enabled ? { json: { expectedShareVersion: shareVersion } } : {}),
+    }),
+  goals: (teamId: string, signal?: AbortSignal) =>
+    request<TeamGoals>(`/teams/${teamId}/goals`, { signal, validate: live.goals.parse }),
+  updateGoals: (
+    teamId: string,
+    body: {
+      expectedVersion: number
+      successRateMin: number | null
+      errorReworkRateMax: number | null
+      tokensPerSuccessMax: number | null
+    },
+  ) =>
+    request<TeamGoals>(`/teams/${teamId}/goals`, {
+      method: 'PUT',
+      json: body,
+      validate: live.goals.parse,
     }),
   outcome: (
     itemId: Id,

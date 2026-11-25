@@ -147,6 +147,13 @@ export const share = z.object({
   shareVersion: count,
   sharedCaseId: id.nullable(),
 })
+export const goals = z.object({
+  version: count,
+  successRateMin: z.number().nullable(),
+  errorReworkRateMax: z.number().nullable(),
+  tokensPerSuccessMax: z.number().nullable(),
+  updatedAt: z.string().nullable(),
+})
 export const sharePreview = z.object({
   previewId: id,
   previewVersion: count,

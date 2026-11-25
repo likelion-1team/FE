@@ -87,6 +87,34 @@ it('records a confirmed outcome against the current confirmation version', async
     note: '보고서에 사용',
   })
 })
+it('replaces every team goal so an omitted target is cleared', async () => {
+  vi.mocked(fetch).mockResolvedValue(
+    json({
+      version: 2,
+      successRateMin: 0.8,
+      errorReworkRateMax: null,
+      tokensPerSuccessMax: 1200,
+      updatedAt: '2026-11-24T10:20:00+09:00',
+    }),
+  )
+  await expect(
+    api.updateGoals('4', {
+      expectedVersion: 1,
+      successRateMin: 0.8,
+      errorReworkRateMax: null,
+      tokensPerSuccessMax: 1200,
+    }),
+  ).resolves.toMatchObject({ version: 2, errorReworkRateMax: null })
+  const [url, init] = vi.mocked(fetch).mock.calls[0]
+  expect(String(url)).toContain('/teams/4/goals')
+  expect(init?.method).toBe('PUT')
+  expect(JSON.parse(String(init?.body))).toEqual({
+    expectedVersion: 1,
+    successRateMin: 0.8,
+    errorReworkRateMax: null,
+    tokensPerSuccessMax: 1200,
+  })
+})
 it('approves a share only after a one-time preview', async () => {
   vi.mocked(fetch)
     .mockResolvedValueOnce(
