@@ -336,6 +336,16 @@ function startBlocked(error: unknown) {
 }
 const terminal = (status?: string) =>
   ['SUCCEEDED', 'PARTIALLY_SUCCEEDED', 'FAILED'].includes(status || '')
+function analysisFailureMessage(code: string) {
+  switch (code) {
+    case 'MODEL_NOT_CONFIGURED':
+      return '서버의 AI 분석 설정이 완료되지 않아 분석하지 못했습니다. 파일을 다시 올리기 전에 서비스 관리자에게 문의해주세요.'
+    case 'MODEL_TIMEOUT':
+      return 'AI 분석 응답 시간이 초과됐습니다. 잠시 후에도 같은 문제가 발생하면 서비스 관리자에게 문의해주세요.'
+    default:
+      return '이 대화를 분석하지 못했습니다. 아래 오류 코드를 서비스 관리자에게 전달해주세요.'
+  }
+}
 function AnalysisProgress({ id }: { id: string }) {
   const { teamId, base } = useWorkspace()
   const [page, setPage] = useState(1)
@@ -381,9 +391,11 @@ function AnalysisProgress({ id }: { id: string }) {
             </Notice>
           )}
           <p>분석 완료는 실제 업무 성공을 의미하지 않습니다.</p>
-          <Link className="button primary" to={`${base}/feedbacks`}>
-            내 피드백 보기
-          </Link>
+          {data.succeededCount > 0 && (
+            <Link className="button primary" to={`${base}/feedbacks`}>
+              내 피드백 보기
+            </Link>
+          )}
           {items.isPending ? (
             <Loading />
           ) : items.isError ? (
@@ -398,7 +410,12 @@ function AnalysisProgress({ id }: { id: string }) {
                       <strong>
                         대화 {String(item.conversationId)} · {labels[item.status] || '상태 확인 중'}
                       </strong>
-                      {item.failureCode && <span>실패 사유: {item.failureCode}</span>}
+                      {item.failureCode && (
+                        <div>
+                          <p>{analysisFailureMessage(item.failureCode)}</p>
+                          <small>오류 코드: {item.failureCode}</small>
+                        </div>
+                      )}
                       {item.feedbackIds.map((feedbackId) => (
                         <Link key={feedbackId} to={`${base}/feedbacks/${feedbackId}`}>
                           피드백 {String(feedbackId)} 보기
