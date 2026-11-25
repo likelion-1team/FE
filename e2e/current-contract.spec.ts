@@ -158,7 +158,8 @@ test('analysis polls by analysisId, stops on partial success and exposes failed 
   await expect(page.getByRole('heading', { name: '분석 중', exact: true })).toBeVisible()
   await page.clock.fastForward(3500)
   await expect(page.getByRole('heading', { name: '일부 분석 완료' })).toBeVisible()
-  await expect(page.getByText('오류 코드: MODEL_TIMEOUT')).toBeVisible()
+  await page.getByText('문의용 오류 정보', { exact: true }).click()
+  await expect(page.getByText(/오류 코드: MODEL_TIMEOUT/)).toBeVisible()
   await expect(page.getByText(/AI 분석 응답 시간이 초과됐습니다/)).toBeVisible()
   await expect(page.getByRole('link', { name: '피드백 11 보기' })).toBeVisible()
   const completedPolls = polls
@@ -199,11 +200,12 @@ test('missing server model configuration explains failure without offering empty
   )
   await page.goto('/teams/1/member/history?analysisId=41')
   await expect(page.getByRole('heading', { name: '분석 실패', exact: true })).toBeVisible()
-  await expect(page.getByText(/서버의 AI 분석 설정이 완료되지 않아/)).toBeVisible()
-  await expect(page.getByText('오류 코드: MODEL_NOT_CONFIGURED')).toBeVisible()
+  await expect(page.getByText(/지금은 AI 분석을 이용할 수 없습니다/)).toBeVisible()
+  await page.getByText('문의용 오류 정보', { exact: true }).click()
+  await expect(page.getByText(/오류 코드: MODEL_NOT_CONFIGURED/)).toBeVisible()
   await expect(page.getByRole('link', { name: '내 피드백 보기', exact: true })).toHaveCount(0)
   await page.reload()
-  await expect(page.getByText(/서버의 AI 분석 설정이 완료되지 않아/)).toBeVisible()
+  await expect(page.getByText(/지금은 AI 분석을 이용할 수 없습니다/)).toBeVisible()
 })
 
 test('unknown analysis success response is an explicit error without false completion', async ({

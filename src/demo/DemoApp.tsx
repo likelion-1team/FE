@@ -76,7 +76,7 @@ export default function DemoApp() {
     setLoaded(false)
     setSelected([])
     try {
-      if (file.size > 10000) throw new Error('다운로드한 작은 데모 JSON 파일만 사용해주세요.')
+      if (file.size > 10000) throw new Error('데모 파일 다운로드에서 받은 파일을 선택해주세요.')
       const parsed: unknown = JSON.parse(await file.text())
       if (generation !== reading.current) return
       if (JSON.stringify(parsed) !== JSON.stringify(demoFile))
@@ -220,7 +220,7 @@ export default function DemoApp() {
                     >
                       <option value="success">모두 성공</option>
                       <option value="partial">부분 성공 (2건 이상 선택)</option>
-                      <option value="failure">서버 모델 설정 실패</option>
+                      <option value="failure">분석 서비스를 이용할 수 없는 경우</option>
                     </select>
                   </Field>
                 </details>

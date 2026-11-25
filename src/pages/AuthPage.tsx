@@ -84,17 +84,17 @@ export function AuthPage({ signup = false }: { signup?: boolean }) {
           {logoutState && (
             <Notice tone={logoutState.phase === 'failed' ? 'error' : ''}>
               {loggingOut
-                ? '이 기기의 개인 화면을 차단했습니다. 서버의 로그아웃 처리를 확인하고 있습니다.'
+                ? '로그아웃 처리 중입니다. 개인 화면은 이미 닫았습니다.'
                 : logoutState.phase === 'done'
                   ? '로그아웃했습니다.'
-                  : '이 기기의 접근은 차단했습니다. 서버 세션 종료는 확인하지 못해 자동 로그인을 막았습니다.'}
+                  : '로그아웃 확인을 마치지 못했습니다. 이 기기의 자동 로그인은 중지했습니다.'}
               {logoutState.phase === 'failed' && (
                 <Button
                   onClick={() => {
                     void logout().catch(() => {})
                   }}
                 >
-                  서버 로그아웃 다시 시도
+                  로그아웃 다시 시도
                 </Button>
               )}
             </Notice>

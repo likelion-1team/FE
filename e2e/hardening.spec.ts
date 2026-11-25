@@ -15,7 +15,7 @@ test('failed cookie logout stays logged out after reload and allows explicit log
   await page.goto('/teams/2/leader/dashboard')
   await page.getByRole('heading', { name: '나의 AI 업무 성과' }).waitFor()
   await page.getByRole('button', { name: '로그아웃', exact: true }).click()
-  await expect(page.getByRole('alert')).toContainText('서버 세션 종료는 확인하지 못해')
+  await expect(page.getByRole('alert')).toContainText('이 기기의 자동 로그인은 중지했습니다.')
   const refreshCount = calls.filter((call) => call.path === '/auth/refresh').length
   await page.reload()
   await expect(page.getByRole('heading', { name: '로그인', exact: true })).toBeVisible()
@@ -44,9 +44,7 @@ test('pending logout immediately removes private routes and exposes a bounded st
   await page.getByRole('heading', { name: '나의 AI 업무 성과' }).waitFor()
   await page.getByRole('button', { name: '로그아웃', exact: true }).click()
   await expect(page).toHaveURL('/login')
-  await expect(
-    page.getByText('이 기기의 개인 화면을 차단했습니다.', { exact: false }),
-  ).toBeVisible()
+  await expect(page.getByText('로그아웃 처리 중입니다.', { exact: false })).toBeVisible()
   await expect(page.getByRole('link', { name: '팀 설정', exact: true })).toHaveCount(0)
   await expect(page.getByRole('button', { name: '로그인', exact: true })).toBeDisabled()
   release?.()
@@ -158,7 +156,7 @@ test('late analysis acceptance cannot navigate a newly selected team', async ({ 
   await (await response).finished()
   await page.waitForTimeout(200)
   await expect(page).toHaveURL('/teams/2/leader/dashboard')
-  await expect(page.getByText('팀장 LEADER', { exact: true })).toBeVisible()
+  await expect(page.getByText('팀장', { exact: true })).toBeVisible()
 })
 
 test('invalid successful JSON preserves navigation and can be retried', async ({ page }) => {

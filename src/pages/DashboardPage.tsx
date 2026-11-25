@@ -33,11 +33,11 @@ function metricStatus(status?: string) {
         NOT_COMPARABLE: '서로 다른 기준으로 비교 불가',
         NO_DATA: '대상 데이터 없음',
         NOT_MEASURED: '미측정',
-        ZERO_DENOMINATOR: '분모 없음',
+        ZERO_DENOMINATOR: '결과가 확인된 업무가 없습니다.',
         INSUFFICIENT_SAMPLE: '표본 부족',
         INSUFFICIENT_CONFIRMATION: '본인 확인율 부족',
       } as Record<string, string>
-    )[status || ''] || '측정 자료 또는 분모가 부족합니다.'
+    )[status || ''] || '아직 충분한 분석 결과가 없습니다.'
   )
 }
 export function TrendChart({ data }: { data: Trends }) {
@@ -116,9 +116,9 @@ export function TrendChart({ data }: { data: Trends }) {
 function parseRatio(text: string) {
   if (!text.trim()) return null
   const value = Number(text)
-  if (!Number.isFinite(value) || value < 0 || value > 1)
-    throw new Error('비율은 0에서 1 사이여야 합니다. 80%는 0.8로 입력합니다.')
-  return value
+  if (!Number.isFinite(value) || value < 0 || value > 100)
+    throw new Error('비율은 0~100%로 입력해주세요.')
+  return value / 100
 }
 function parseTokens(text: string) {
   if (!text.trim()) return null
@@ -171,12 +171,11 @@ function SubmissionsPanel({ teamId }: { teamId: string }) {
             <p>기여 인원·공개 정책에 따라 대화 수와 커버리지는 비공개입니다.</p>
           ) : (
             <>
-              <p>분석 기준 버전 {submissions.data.settingsVersion ?? '미설정'}</p>
               <p>
                 분석된 대화 {goalTokens(submissions.data.analyzedConversations)} / 목표{' '}
                 {goalTokens(submissions.data.targetCount)}
               </p>
-              <p>커버리지 {goalRatio(submissions.data.coverageRatio)}</p>
+              <p>목표 대비 분석 비율 {goalRatio(submissions.data.coverageRatio)}</p>
               <p className="muted">선택한 대화 비율이며, 회사 전체 업무를 대표하지 않습니다.</p>
             </>
           )}
@@ -192,6 +191,7 @@ function GoalsPanel({ teamId, canEdit }: { teamId: string; canEdit: boolean }) {
     queryFn: ({ signal }) => api.goals(teamId, signal),
   })
   const [editing, setEditing] = useState(false)
+  const [conflict, setConflict] = useState(false)
   const [successRateMin, setSuccessRateMin] = useState('')
   const [errorReworkRateMax, setErrorReworkRateMax] = useState('')
   const [tokensPerSuccessMax, setTokensPerSuccessMax] = useState('')
@@ -208,33 +208,44 @@ function GoalsPanel({ teamId, canEdit }: { teamId: string; canEdit: boolean }) {
       await client.invalidateQueries({ queryKey: ['team', teamId, 'goals'] })
     },
     onError: async (error) => {
-      if (error instanceof ApiError && error.code === 'VERSION_CONFLICT') await goals.refetch()
+      if (error instanceof ApiError && error.code === 'VERSION_CONFLICT') {
+        setConflict(true)
+        await goals.refetch()
+      }
     },
   })
   return (
     <Card>
       <h2>팀 목표</h2>
-      <p>비워 두면 해당 목표는 해제됩니다. 저장은 세 값을 함께 바꿉니다.</p>
+      {editing && <p>설정하지 않을 목표는 비워두세요.</p>}
       {goals.isPending ? (
         <Loading />
       ) : goals.isError ? (
         <ErrorState error={goals.error} retry={() => void goals.refetch()} />
       ) : editing ? (
         <>
-          <Field label="본인 확인 성공률 하한 · 0~1">
+          <Field label="목표 성공률 · %">
             <input
+              type="number"
+              min="0"
+              max="100"
+              step="any"
               inputMode="decimal"
               value={successRateMin}
               onChange={(e) => setSuccessRateMin(e.target.value)}
-              placeholder="0.8"
+              placeholder="80"
             />
           </Field>
-          <Field label="오류 수정 재작업률 상한 · 0~1">
+          <Field label="허용 재작업률 · %">
             <input
+              type="number"
+              min="0"
+              max="100"
+              step="any"
               inputMode="decimal"
               value={errorReworkRateMax}
               onChange={(e) => setErrorReworkRateMax(e.target.value)}
-              placeholder="0.2"
+              placeholder="20"
             />
           </Field>
           <Field label="확인된 성공 업무당 토큰 상한">
@@ -246,8 +257,13 @@ function GoalsPanel({ teamId, canEdit }: { teamId: string; canEdit: boolean }) {
             />
           </Field>
           <ErrorMessage error={save.error} />
+          {conflict && (
+            <Notice tone="error">
+              다른 사람이 목표를 변경했습니다. 취소한 뒤 목표를 다시 확인해주세요.
+            </Notice>
+          )}
           <div className="row">
-            <Button disabled={save.isPending} onClick={() => save.mutate()}>
+            <Button disabled={save.isPending || conflict} onClick={() => save.mutate()}>
               {save.isPending ? '저장 중…' : '목표 저장'}
             </Button>
             <Button variant="ghost" disabled={save.isPending} onClick={() => setEditing(false)}>
@@ -257,19 +273,27 @@ function GoalsPanel({ teamId, canEdit }: { teamId: string; canEdit: boolean }) {
         </>
       ) : (
         <>
-          <p>본인 확인 성공률 하한 {goalRatio(goals.data.successRateMin)}</p>
-          <p>오류 수정 재작업률 상한 {goalRatio(goals.data.errorReworkRateMax)}</p>
+          <p>
+            목표 성공률 {goalRatio(goals.data.successRateMin)}
+            {goals.data.successRateMin == null ? '' : ' 이상'}
+          </p>
+          <p>
+            허용 재작업률 {goalRatio(goals.data.errorReworkRateMax)}
+            {goals.data.errorReworkRateMax == null ? '' : ' 이하'}
+          </p>
           <p>확인된 성공 업무당 토큰 상한 {goalTokens(goals.data.tokensPerSuccessMax)}</p>
           {canEdit ? (
             <Button
               onClick={() => {
                 setSuccessRateMin(
-                  goals.data.successRateMin == null ? '' : String(goals.data.successRateMin),
+                  goals.data.successRateMin == null
+                    ? ''
+                    : String(Math.round(goals.data.successRateMin * 10000) / 100),
                 )
                 setErrorReworkRateMax(
                   goals.data.errorReworkRateMax == null
                     ? ''
-                    : String(goals.data.errorReworkRateMax),
+                    : String(Math.round(goals.data.errorReworkRateMax * 10000) / 100),
                 )
                 setTokensPerSuccessMax(
                   goals.data.tokensPerSuccessMax == null
@@ -277,6 +301,7 @@ function GoalsPanel({ teamId, canEdit }: { teamId: string; canEdit: boolean }) {
                     : String(goals.data.tokensPerSuccessMax),
                 )
                 save.reset()
+                setConflict(false)
                 setEditing(true)
               }}
             >
@@ -357,11 +382,6 @@ function DashboardContent({ scope }: { scope: 'ME' | 'TEAM' }) {
         }
       />
       {scope === 'TEAM' && leader && <SubmissionsPanel teamId={teamId} />}
-      {scope === 'TEAM' && !leader && (
-        <Notice>
-          팀 집계 공개 범위는 서버 권한에 따릅니다. 조회가 제한되면 팀장에게 문의해주세요.
-        </Notice>
-      )}
       {options.isPending ? (
         <Loading />
       ) : options.isError ? (
@@ -415,7 +435,7 @@ function DashboardContent({ scope }: { scope: 'ME' | 'TEAM' }) {
               </select>
             </Field>
           )}
-          <Field label="분석 기준 버전">
+          <Field label="분석 기준">
             <select
               value={draft.settingsVersion || dates.settingsVersion}
               onChange={(e) => setDraft({ ...draft, settingsVersion: e.target.value })}
@@ -424,7 +444,7 @@ function DashboardContent({ scope }: { scope: 'ME' | 'TEAM' }) {
                 (version) =>
                   version != null && (
                     <option key={version} value={version}>
-                      버전 {version}
+                      기준 {version}
                     </option>
                   ),
               )}
@@ -447,11 +467,10 @@ function DashboardContent({ scope }: { scope: 'ME' | 'TEAM' }) {
       {invalidDates && <Notice tone="error">종료일은 시작일 이후여야 합니다.</Notice>}
       <GoalsPanel teamId={teamId} canEdit={team.capabilities?.canEditGoals === true} />
       <Notice>
-        아래 지표는 본인 확인 결과를 집계하며 토큰 수는 토크나이저 추정값입니다. 팀 지표는 완료된
-        주간과 서버의 기여 인원·표본·확인율 정책을 적용합니다.
+        실제 업무 결과를 확인하면 성과에 반영됩니다. 팀 성과는 완료된 주간을 기준으로 표시합니다.
       </Notice>
       {options.isSuccess && !ready && (
-        <Notice>조회 가능한 기준 버전 또는 완료된 주간이 없습니다.</Notice>
+        <Notice>아직 조회할 분석 결과가 없습니다. 대화를 업로드해 시작해보세요.</Notice>
       )}
       {ready &&
         (kpis.isPending ? (

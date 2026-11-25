@@ -5,6 +5,7 @@ import { useAuth } from '../auth'
 import { api } from '../api/service'
 import type { Team } from '../api/types'
 import { Button, ErrorState, Loading, Modal } from './ui'
+import { WorkflowSteps } from './WorkflowSteps'
 
 const Context = createContext<{ team: Team; teamId: string; leader: boolean; base: string } | null>(
   null,
@@ -42,7 +43,7 @@ export function Topbar({ team }: { team?: Team }) {
             {team ? `${team.name} · 팀 전환` : '내 팀 목록'}
           </Button>
           <span className="role-badge">
-            {team ? (team.myRole === 'LEADER' ? '팀장 LEADER' : '팀원 MEMBER') : '팀 선택 전'}
+            {team ? (team.myRole === 'LEADER' ? '팀장' : '팀원') : '팀 선택 전'}
           </span>
           <Button variant="ghost" onClick={() => setInfo(true)}>
             내 정보
@@ -113,7 +114,7 @@ export function Workspace() {
       <Topbar team={team} />
       <div className="workspace">
         <aside className="sidebar">
-          <small>WORKSPACE</small>
+          <small>업무 공간</small>
           <nav aria-label="업무 공간 메뉴">
             {menu.map(([path, label]) => (
               <NavLink
@@ -133,7 +134,11 @@ export function Workspace() {
             </p>
           </div>
         </aside>
-        <main className="content" id="main">
+        <main className="content" id="main" tabIndex={-1}>
+          <WorkflowSteps
+            base={base}
+            canViewTeamMetrics={team.capabilities?.canViewTeamMetrics === true}
+          />
           <Outlet key={`${teamId}-${workspace}`} />
         </main>
       </div>
