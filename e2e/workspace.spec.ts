@@ -108,8 +108,10 @@ test('feedback reaction cancellation, escaped originals, share revocation and pe
   await page.getByRole('button', { name: '기존 공유 철회' }).click()
   await page.getByRole('button', { name: '공유 철회', exact: true }).click()
   await expect(page.getByText('공유를 철회했습니다.')).toBeVisible()
-  await expect(page.getByRole('button', { name: '업무 결과 확인', exact: true })).toBeDisabled()
-  await expect(page.getByRole('button', { name: '대화 삭제', exact: true })).toBeDisabled()
+  await expect(page.getByRole('button', { name: '성공', exact: true })).toBeEnabled()
+  await expect(page.getByRole('button', { name: '재작업 이유 저장', exact: true })).toBeEnabled()
+  await expect(page.getByText('실제 사용 여부와 대화 삭제는 준비 중입니다.')).toBeVisible()
+  await expect(page.getByRole('button', { name: '대화 삭제', exact: true })).toHaveCount(0)
   expect(calls.some((c) => c.method === 'DELETE' && c.path.endsWith('/reaction'))).toBe(true)
   expect(calls.some((c) => c.path.endsWith('/share') && JSON.parse(c.body!).shared === false)).toBe(
     true,

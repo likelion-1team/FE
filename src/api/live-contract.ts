@@ -118,6 +118,35 @@ export const feedback = z.object({
   limitations: z.array(z.string()),
   reaction: z.enum(['HELPFUL', 'NOT_APPLICABLE']).nullable(),
   sharing: z.object({ status: z.string(), version: count, sharedCaseId: id.nullable() }),
+  outcomeAssessment: z
+    .object({
+      outcome: z.enum(['SUCCESS', 'FAILURE', 'UNKNOWN']),
+      source: z.string(),
+      version: count,
+      assessedAt: z.string(),
+    })
+    .nullable()
+    .optional(),
+  reworkAssessment: z
+    .object({
+      type: z.enum([
+        'ERROR_CORRECTION',
+        'REQUIREMENT_CHANGE',
+        'EXPRESSION_REFINEMENT',
+        'EXPLORATION',
+        'NONE',
+        'UNKNOWN',
+      ]),
+      source: z.string(),
+      version: count,
+      assessedAt: z.string(),
+    })
+    .nullable()
+    .optional(),
+  aiAssessment: z
+    .object({ outcome: z.string().nullable(), reworkType: z.string().nullable() })
+    .nullable()
+    .optional(),
 })
 export const conversation = z.object({
   conversationVersionId: id,
@@ -146,4 +175,55 @@ export const share = z.object({
   shared: z.boolean(),
   shareVersion: count,
   sharedCaseId: id.nullable(),
+})
+export const submissions = z.object({
+  settingsVersion: count.nullable(),
+  submittedMembers: count,
+  totalMembers: count,
+  analyzedConversations: count.nullable(),
+  targetCount: count.nullable(),
+  coverageRatio: z.number().nullable(),
+  status: z.enum(['AVAILABLE', 'SUPPRESSED']),
+})
+export const goals = z.object({
+  version: count,
+  successRateMin: z.number().nullable(),
+  errorReworkRateMax: z.number().nullable(),
+  tokensPerSuccessMax: z.number().nullable(),
+  updatedAt: z.string().nullable(),
+})
+export const sharePreview = z.object({
+  previewId: id,
+  previewVersion: count,
+  expiresAt: z.string(),
+  redactionStatus: z.string(),
+  content: z.object({
+    title: z.string(),
+    type: z.string(),
+    problem: z.string(),
+    improvement: z.string(),
+    example: z.object({ before: z.string(), after: z.string() }),
+  }),
+})
+export const outcome = z.object({
+  itemId: id,
+  version: count,
+  outcome: z.enum(['SUCCESS', 'FAILURE', 'UNKNOWN']),
+  source: z.string(),
+  assessedAt: z.string(),
+})
+export const reworkTypes = [
+  'ERROR_CORRECTION',
+  'REQUIREMENT_CHANGE',
+  'EXPRESSION_REFINEMENT',
+  'EXPLORATION',
+  'NONE',
+  'UNKNOWN',
+] as const
+export const rework = z.object({
+  itemId: id,
+  version: count,
+  type: z.enum(reworkTypes),
+  source: z.string(),
+  assessedAt: z.string(),
 })

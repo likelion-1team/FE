@@ -2,7 +2,15 @@ import { useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api/service'
-import type { FeedbackItem, FeedbackList, Id, Reaction } from '../api/types'
+import type {
+  FeedbackItem,
+  FeedbackList,
+  Id,
+  OutcomeAssessment,
+  Reaction,
+  ReworkAssessment,
+  SharePreview,
+} from '../api/types'
 import { useWorkspace } from '../components/Workspace'
 import {
   Button,
@@ -10,7 +18,6 @@ import {
   Empty,
   ErrorMessage,
   ErrorState,
-  FeaturePending,
   Field,
   formatDate,
   Loading,
@@ -19,6 +26,19 @@ import {
   PageTitle,
   today,
 } from '../components/ui'
+
+const reworkOptions = [
+  ['ERROR_CORRECTION', '오류 수정'],
+  ['REQUIREMENT_CHANGE', '요구 변경'],
+  ['EXPRESSION_REFINEMENT', '표현 개선'],
+  ['EXPLORATION', '탐색·추가 질문'],
+  ['NONE', '다시 처리하지 않음'],
+  ['UNKNOWN', '구분할 수 없음'],
+] as const
+const outcomeLabels = { SUCCESS: '성공', FAILURE: '실패', UNKNOWN: '모름' } as const
+function reworkLabel(type: string) {
+  return reworkOptions.find(([value]) => value === type)?.[1] ?? type
+}
 
 export const feedbackTypes = [
   { value: '', label: '모든 피드백 유형' },
@@ -206,7 +226,17 @@ function FeedbackDetailContent() {
     [revoke, setRevoke] = useState(false),
     [revoked, setRevoked] = useState(false),
     [copyMessage, setCopyMessage] = useState(''),
-    [copyError, setCopyError] = useState(false)
+    [copyError, setCopyError] = useState(false),
+    [savedOutcome, setSavedOutcome] = useState<OutcomeAssessment | null>(null),
+    [outcomeNote, setOutcomeNote] = useState(''),
+    [outcomeMessage, setOutcomeMessage] = useState(''),
+    [savedRework, setSavedRework] = useState<ReworkAssessment | null>(null),
+    [reworkType, setReworkType] = useState<(typeof reworkOptions)[number][0] | null>(null),
+    [reworkNote, setReworkNote] = useState(''),
+    [reworkMessage, setReworkMessage] = useState(''),
+    [preview, setPreview] = useState<SharePreview | null>(null),
+    [shareMessage, setShareMessage] = useState(''),
+    [shareVersionOverride, setShareVersionOverride] = useState<number | null>(null)
   const currentReaction =
     reactionOverride === undefined
       ? query.data && 'reaction' in query.data
@@ -236,10 +266,82 @@ function FeedbackDetailContent() {
       setReason('')
     },
   })
-  const share = useMutation({
-    mutationFn: () => api.revokeShare(feedbackId, query.data?.sharing?.version),
+  const outcomeAssessment = savedOutcome ?? query.data?.outcomeAssessment ?? null
+  const reworkAssessment = savedRework ?? query.data?.reworkAssessment ?? null
+  const selectedRework = reworkType ?? reworkAssessment?.type ?? 'ERROR_CORRECTION'
+  const saveOutcome = useMutation({
+    mutationFn: (outcome: 'SUCCESS' | 'FAILURE' | 'UNKNOWN') => {
+      if (query.data?.itemId == null) throw new Error('확인할 분석 항목이 없습니다.')
+      return api.outcome(query.data.itemId, {
+        expectedVersion: outcomeAssessment?.version ?? 0,
+        outcome,
+        ...(outcomeNote.trim() ? { note: outcomeNote.trim() } : {}),
+      })
+    },
+    onSuccess: async (saved) => {
+      setSavedOutcome(saved)
+      setOutcomeNote('')
+      setOutcomeMessage(
+        saved.outcome === 'UNKNOWN'
+          ? '결과를 모름으로 저장했습니다. 성공률 분모에는 넣지 않습니다.'
+          : '업무 결과를 저장했습니다. 성공률은 이 확인값으로 계산됩니다.',
+      )
+      await client.invalidateQueries({ queryKey: ['team', teamId, 'feedback', feedbackId] })
+    },
+  })
+  const saveRework = useMutation({
+    mutationFn: () => {
+      if (query.data?.itemId == null) throw new Error('확인할 분석 항목이 없습니다.')
+      return api.rework(query.data.itemId, {
+        expectedVersion: reworkAssessment?.version ?? 0,
+        type: selectedRework,
+        ...(reworkNote.trim() ? { note: reworkNote.trim() } : {}),
+      })
+    },
+    onSuccess: async (saved) => {
+      setSavedRework(saved)
+      setReworkType(saved.type)
+      setReworkNote('')
+      setReworkMessage(
+        saved.type === 'UNKNOWN'
+          ? '재작업 이유를 모름으로 저장했습니다. 오류 재작업률에서는 제외됩니다.'
+          : saved.type === 'ERROR_CORRECTION'
+            ? '오류 수정으로 저장했습니다. 오류 재작업률의 분자에 포함됩니다.'
+            : '재작업 이유를 저장했습니다. 분모에만 포함됩니다.',
+      )
+      await client.invalidateQueries({ queryKey: ['team', teamId, 'feedback', feedbackId] })
+    },
+  })
+  const previewShare = useMutation({
+    mutationFn: () => api.sharePreview(feedbackId),
+    onSuccess: (value) => {
+      setPreview(value)
+      setShareMessage('')
+    },
+  })
+  const approveShare = useMutation({
+    mutationFn: () => {
+      if (!preview) throw new Error('공유 미리보기가 없습니다.')
+      return api.approveShare(feedbackId, {
+        expectedShareVersion: shareVersionOverride ?? query.data?.sharing?.version ?? 0,
+        previewId: preview.previewId,
+        previewVersion: preview.previewVersion,
+      })
+    },
     onSuccess: async () => {
+      setPreview(null)
+      setShareMessage('공유를 승인했습니다.')
+      patchList({ isShared: true })
+      await client.invalidateQueries({ queryKey: ['team', teamId, 'feedback', feedbackId] })
+      await client.invalidateQueries({ queryKey: ['team', teamId, 'guides'] })
+      await client.invalidateQueries({ queryKey: ['team', teamId, 'shared'] })
+    },
+  })
+  const share = useMutation({
+    mutationFn: () => api.revokeShare(feedbackId),
+    onSuccess: async (saved) => {
       setRevoked(true)
+      setShareVersionOverride(saved.shareVersion)
       setRevoke(false)
       patchList({ isShared: false })
       await client.invalidateQueries({ queryKey: ['team', teamId, 'guides'] })
@@ -259,6 +361,8 @@ function FeedbackDetailContent() {
   if (query.isPending) return <Loading />
   if (query.isError) return <ErrorState error={query.error} retry={() => void query.refetch()} />
   const data = query.data
+  const sharedNow =
+    !revoked && (data.sharing ? data.sharing.status === 'SHARED' : item?.isShared === true)
   return (
     <>
       <PageTitle title="피드백 상세" />
@@ -305,11 +409,20 @@ function FeedbackDetailContent() {
           <h3>예상 절감량</h3>
           <strong className="success">미측정</strong>
           <p>검증된 절감 근거가 없습니다.</p>
-          <FeaturePending title="공유본 미리보기">
-            공유본을 확인하고 승인하는 기능은 준비 중입니다. 새 공유 승인은 아직 지원하지 않습니다.
-          </FeaturePending>
-          {!revoked &&
-            (data.sharing ? data.sharing.status === 'SHARED' : item?.isShared === true) && (
+          {!sharedNow && (
+              <>
+                <p>
+                  새 공유는 가려진 미리보기를 확인한 뒤에만 승인됩니다. 미리보기는 30분 동안, 한 번만
+                  쓸 수 있습니다.
+                </p>
+                <Button disabled={previewShare.isPending} onClick={() => previewShare.mutate()}>
+                  {previewShare.isPending ? '미리보기 만드는 중…' : '공유 미리보기'}
+                </Button>
+                <ErrorMessage error={previewShare.error} />
+                {shareMessage && <Notice>{shareMessage}</Notice>}
+              </>
+            )}
+          {sharedNow && (
               <Button
                 onClick={() => {
                   share.reset()
@@ -319,7 +432,9 @@ function FeedbackDetailContent() {
                 기존 공유 철회
               </Button>
             )}
-          {revoked && <Notice>공유를 철회했습니다.</Notice>}
+          {revoked && (
+            <Notice>공유를 철회했습니다. 다시 공유하려면 새 미리보기가 필요합니다.</Notice>
+          )}
         </Card>
       </div>
       <div className="two-col">
@@ -368,15 +483,101 @@ function FeedbackDetailContent() {
         <ErrorMessage error={reaction.error} />
       </Card>
       <div className="notice">
-        <h2>AI 추정과 실제 결과를 구분해주세요</h2>
-        <p>업무 결과·재작업 유형·실제 사용 여부 확인과 대화 삭제는 준비 중입니다.</p>
-        <div className="row">
-          {['업무 결과 확인', '재작업 유형 확인', '실제로 사용했어요', '대화 삭제'].map((label) => (
-            <Button key={label} disabled title="기능 준비 중">
-              {label}
+        <h2>업무가 실제로 성공했는지 확인해주세요</h2>
+        <p>성공률은 여기서 확인한 성공·실패만 분모로 씁니다. 모름은 저장되지만 분모에서 빠집니다.</p>
+        {data.aiAssessment?.outcome && (
+          <p className="muted">
+            AI 추정은 {outcomeLabels[data.aiAssessment.outcome as keyof typeof outcomeLabels] ?? data.aiAssessment.outcome}
+            입니다. 아래 저장값과는 따로 둡니다.
+          </p>
+        )}
+        {outcomeAssessment ? (
+          <p>
+            저장된 본인 확인 {outcomeLabels[outcomeAssessment.outcome]} · 버전{' '}
+            {outcomeAssessment.version}
+          </p>
+        ) : (
+          <p>아직 본인 확인이 없습니다.</p>
+        )}
+        {data.itemId == null ? (
+          <p>분석 항목이 없는 이전 피드백은 결과를 확인할 수 없습니다.</p>
+        ) : (
+          <>
+            <Field label="확인 메모 · 선택">
+              <textarea
+                maxLength={500}
+                value={outcomeNote}
+                onChange={(e) => setOutcomeNote(e.target.value)}
+                placeholder="본인만 볼 수 있는 메모입니다."
+              />
+            </Field>
+            <div className="row">
+              {(
+                [
+                  ['SUCCESS', '성공'],
+                  ['FAILURE', '실패'],
+                  ['UNKNOWN', '모름'],
+                ] as const
+              ).map(([value, label]) => (
+                <Button
+                  key={value}
+                  disabled={saveOutcome.isPending}
+                  onClick={() => saveOutcome.mutate(value)}
+                >
+                  {label}
+                </Button>
+              ))}
+            </div>
+            {outcomeMessage && <Notice>{outcomeMessage}</Notice>}
+            <ErrorMessage error={saveOutcome.error} />
+          </>
+        )}
+        <h2>다시 요청한 이유를 골라주세요</h2>
+        <p>오류 재작업률의 분자는 오류 수정만 셉니다. 오류 수정이 있었다면 그 이유를 우선 골라주세요.</p>
+        {data.aiAssessment?.reworkType && (
+          <p className="muted">
+            AI 추정 이유는 {reworkLabel(data.aiAssessment.reworkType)}입니다. 저장값과는 따로 둡니다.
+          </p>
+        )}
+        {reworkAssessment ? (
+          <p>
+            저장된 재작업 이유 {reworkLabel(reworkAssessment.type)} · 버전 {reworkAssessment.version}
+          </p>
+        ) : (
+          <p>아직 재작업 이유를 확인하지 않았습니다.</p>
+        )}
+        {data.itemId == null ? (
+          <p>분석 항목이 없는 이전 피드백은 재작업 이유를 확인할 수 없습니다.</p>
+        ) : (
+          <>
+            <Field label="재작업 이유">
+              <select
+                value={selectedRework}
+                onChange={(e) => setReworkType(e.target.value as (typeof reworkOptions)[number][0])}
+              >
+                {reworkOptions.map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="이유 메모 · 선택">
+              <textarea
+                maxLength={500}
+                value={reworkNote}
+                onChange={(e) => setReworkNote(e.target.value)}
+                placeholder="본인만 볼 수 있는 메모입니다."
+              />
+            </Field>
+            <Button disabled={saveRework.isPending} onClick={() => saveRework.mutate()}>
+              재작업 이유 저장
             </Button>
-          ))}
-        </div>
+            {reworkMessage && <Notice>{reworkMessage}</Notice>}
+            <ErrorMessage error={saveRework.error} />
+          </>
+        )}
+        <p>실제 사용 여부와 대화 삭제는 준비 중입니다.</p>
       </div>
       {original !== null && (
         <OriginalConversation
@@ -384,6 +585,31 @@ function FeedbackDetailContent() {
           feedbackId={feedbackId}
           onClose={() => setOriginal(null)}
         />
+      )}
+      {preview && (
+        <Modal
+          title="공유 미리보기"
+          onClose={() => {
+            if (!approveShare.isPending) setPreview(null)
+          }}
+        >
+          <p>개인정보가 가려진 내용입니다. 이 내용으로 승인하면 팀에 공유됩니다.</p>
+          <h3>{preview.content.title}</h3>
+          <p>{preview.content.type}</p>
+          <h3>문제</h3>
+          <p className="pre-wrap">{preview.content.problem}</p>
+          <h3>개선</h3>
+          <p className="pre-wrap">{preview.content.improvement}</p>
+          <h3>개선 전</h3>
+          <p className="pre-wrap">{preview.content.example.before}</p>
+          <h3>개선 후</h3>
+          <p className="pre-wrap">{preview.content.example.after}</p>
+          <p className="muted">만료 {preview.expiresAt}</p>
+          <ErrorMessage error={approveShare.error} />
+          <Button disabled={approveShare.isPending} onClick={() => approveShare.mutate()}>
+            {approveShare.isPending ? '승인 중…' : '이 내용으로 공유'}
+          </Button>
+        </Modal>
       )}
       {revoke && (
         <Modal

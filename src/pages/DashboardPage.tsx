@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { ApiError } from '../api/client'
 import { api } from '../api/service'
 import type { Trends } from '../api/types'
 import { useWorkspace } from '../components/Workspace'
@@ -8,8 +9,8 @@ import {
   Button,
   Card,
   Empty,
+  ErrorMessage,
   ErrorState,
-  FeaturePending,
   Field,
   formatNumber,
   Loading,
@@ -112,6 +113,177 @@ export function TrendChart({ data }: { data: Trends }) {
   )
 }
 
+function parseRatio(text: string) {
+  if (!text.trim()) return null
+  const value = Number(text)
+  if (!Number.isFinite(value) || value < 0 || value > 1)
+    throw new Error('비율은 0에서 1 사이여야 합니다. 80%는 0.8로 입력합니다.')
+  return value
+}
+function parseTokens(text: string) {
+  if (!text.trim()) return null
+  const value = Number(text)
+  if (!Number.isInteger(value) || value < 1) throw new Error('토큰 상한은 1 이상의 정수여야 합니다.')
+  return value
+}
+function goalRatio(value: number | null) {
+  return value == null ? '미설정' : `${(value * 100).toFixed(1)}%`
+}
+function goalTokens(value: number | null) {
+  return value == null ? '미설정' : new Intl.NumberFormat('ko-KR').format(value)
+}
+function goalBaseline(
+  key: string,
+  goals?: {
+    successRateMin: number | null
+    errorReworkRateMax: number | null
+    tokensPerSuccessMax: number | null
+  },
+) {
+  if (!goals) return null
+  if (key === 'successRate' && goals.successRateMin != null) return `목표 ${goalRatio(goals.successRateMin)} 이상`
+  if (key === 'reworkRate' && goals.errorReworkRateMax != null)
+    return `목표 ${goalRatio(goals.errorReworkRateMax)} 이하`
+  if (key === 'tokensPerSuccess' && goals.tokensPerSuccessMax != null)
+    return `목표 ${goalTokens(goals.tokensPerSuccessMax)} 이하`
+  return null
+}
+function SubmissionsPanel({ teamId }: { teamId: string }) {
+  const submissions = useQuery({
+    queryKey: ['team', teamId, 'submissions'],
+    queryFn: ({ signal }) => api.submissions(teamId, signal),
+  })
+  return (
+    <Card>
+      <h2>팀 제출 현황</h2>
+      {submissions.isPending ? (
+        <Loading />
+      ) : submissions.isError ? (
+        <ErrorState error={submissions.error} retry={() => void submissions.refetch()} />
+      ) : (
+        <>
+          <p>
+            제출 인원 {submissions.data.submittedMembers}/{submissions.data.totalMembers}
+          </p>
+          {submissions.data.status === 'SUPPRESSED' ? (
+            <p>기여 인원·공개 정책에 따라 대화 수와 커버리지는 비공개입니다.</p>
+          ) : (
+            <>
+              <p>분석 기준 버전 {submissions.data.settingsVersion ?? '미설정'}</p>
+              <p>
+                분석된 대화 {goalTokens(submissions.data.analyzedConversations)} / 목표{' '}
+                {goalTokens(submissions.data.targetCount)}
+              </p>
+              <p>커버리지 {goalRatio(submissions.data.coverageRatio)}</p>
+              <p className="muted">선택한 대화 비율이며, 회사 전체 업무를 대표하지 않습니다.</p>
+            </>
+          )}
+        </>
+      )}
+    </Card>
+  )
+}
+function GoalsPanel({ teamId, canEdit }: { teamId: string; canEdit: boolean }) {
+  const client = useQueryClient()
+  const goals = useQuery({
+    queryKey: ['team', teamId, 'goals'],
+    queryFn: ({ signal }) => api.goals(teamId, signal),
+  })
+  const [editing, setEditing] = useState(false)
+  const [successRateMin, setSuccessRateMin] = useState('')
+  const [errorReworkRateMax, setErrorReworkRateMax] = useState('')
+  const [tokensPerSuccessMax, setTokensPerSuccessMax] = useState('')
+  const save = useMutation({
+    mutationFn: () =>
+      api.updateGoals(teamId, {
+        expectedVersion: goals.data?.version ?? 0,
+        successRateMin: parseRatio(successRateMin),
+        errorReworkRateMax: parseRatio(errorReworkRateMax),
+        tokensPerSuccessMax: parseTokens(tokensPerSuccessMax),
+      }),
+    onSuccess: async () => {
+      setEditing(false)
+      await client.invalidateQueries({ queryKey: ['team', teamId, 'goals'] })
+    },
+    onError: async (error) => {
+      if (error instanceof ApiError && error.code === 'VERSION_CONFLICT') await goals.refetch()
+    },
+  })
+  return (
+    <Card>
+      <h2>팀 목표</h2>
+      <p>비워 두면 해당 목표는 해제됩니다. 저장은 세 값을 함께 바꿉니다.</p>
+      {goals.isPending ? (
+        <Loading />
+      ) : goals.isError ? (
+        <ErrorState error={goals.error} retry={() => void goals.refetch()} />
+      ) : editing ? (
+        <>
+          <Field label="본인 확인 성공률 하한 · 0~1">
+            <input
+              inputMode="decimal"
+              value={successRateMin}
+              onChange={(e) => setSuccessRateMin(e.target.value)}
+              placeholder="0.8"
+            />
+          </Field>
+          <Field label="오류 수정 재작업률 상한 · 0~1">
+            <input
+              inputMode="decimal"
+              value={errorReworkRateMax}
+              onChange={(e) => setErrorReworkRateMax(e.target.value)}
+              placeholder="0.2"
+            />
+          </Field>
+          <Field label="확인된 성공 업무당 토큰 상한">
+            <input
+              inputMode="numeric"
+              value={tokensPerSuccessMax}
+              onChange={(e) => setTokensPerSuccessMax(e.target.value)}
+              placeholder="1200"
+            />
+          </Field>
+          <ErrorMessage error={save.error} />
+          <div className="row">
+            <Button disabled={save.isPending} onClick={() => save.mutate()}>
+              {save.isPending ? '저장 중…' : '목표 저장'}
+            </Button>
+            <Button variant="ghost" disabled={save.isPending} onClick={() => setEditing(false)}>
+              취소
+            </Button>
+          </div>
+        </>
+      ) : (
+        <>
+          <p>본인 확인 성공률 하한 {goalRatio(goals.data.successRateMin)}</p>
+          <p>오류 수정 재작업률 상한 {goalRatio(goals.data.errorReworkRateMax)}</p>
+          <p>확인된 성공 업무당 토큰 상한 {goalTokens(goals.data.tokensPerSuccessMax)}</p>
+          {canEdit ? (
+            <Button
+              onClick={() => {
+                setSuccessRateMin(
+                  goals.data.successRateMin == null ? '' : String(goals.data.successRateMin),
+                )
+                setErrorReworkRateMax(
+                  goals.data.errorReworkRateMax == null ? '' : String(goals.data.errorReworkRateMax),
+                )
+                setTokensPerSuccessMax(
+                  goals.data.tokensPerSuccessMax == null ? '' : String(goals.data.tokensPerSuccessMax),
+                )
+                save.reset()
+                setEditing(true)
+              }}
+            >
+              목표 수정
+            </Button>
+          ) : (
+            <p className="muted">목표 변경은 팀장만 할 수 있습니다.</p>
+          )}
+        </>
+      )}
+    </Card>
+  )
+}
 export function DashboardPage({ scope = 'ME' }: { scope?: 'ME' | 'TEAM' }) {
   const { team } = useWorkspace()
   if (scope === 'TEAM' && team.capabilities?.canViewTeamMetrics !== true)
@@ -119,7 +291,11 @@ export function DashboardPage({ scope = 'ME' }: { scope?: 'ME' | 'TEAM' }) {
   return <DashboardContent key={scope} scope={scope} />
 }
 function DashboardContent({ scope }: { scope: 'ME' | 'TEAM' }) {
-  const { teamId, leader, base } = useWorkspace()
+  const { team, teamId, leader, base } = useWorkspace()
+  const goals = useQuery({
+    queryKey: ['team', teamId, 'goals'],
+    queryFn: ({ signal }) => api.goals(teamId, signal),
+  })
   const options = useQuery({
     queryKey: ['team', teamId, 'options', scope],
     queryFn: ({ signal }) => api.options(teamId, signal, scope),
@@ -168,6 +344,7 @@ function DashboardContent({ scope }: { scope: 'ME' | 'TEAM' }) {
             : '팀 성과는 집계로 확인합니다. 개인 원문과 피드백은 본인만 봅니다.'
         }
       />
+      {scope === 'TEAM' && leader && <SubmissionsPanel teamId={teamId} />}
       {scope === 'TEAM' && !leader && (
         <Notice>
           팀 집계 공개 범위는 서버 권한에 따릅니다. 조회가 제한되면 팀장에게 문의해주세요.
@@ -256,10 +433,11 @@ function DashboardContent({ scope }: { scope: 'ME' | 'TEAM' }) {
         </form>
       )}
       {invalidDates && <Notice tone="error">종료일은 시작일 이후여야 합니다.</Notice>}
-      <FeaturePending title="팀 목표">
-        목표 편집 화면은 준비 중입니다. 아래 지표는 본인 확인 결과를 집계하며 토큰 수는 토크나이저
-        추정값입니다. 팀 지표는 완료된 주간과 서버의 기여 인원·표본·확인율 정책을 적용합니다.
-      </FeaturePending>
+      <GoalsPanel teamId={teamId} canEdit={team.capabilities?.canEditGoals === true} />
+      <Notice>
+        아래 지표는 본인 확인 결과를 집계하며 토큰 수는 토크나이저 추정값입니다. 팀 지표는 완료된
+        주간과 서버의 기여 인원·표본·확인율 정책을 적용합니다.
+      </Notice>
       {options.isSuccess && !ready && (
         <Notice>조회 가능한 기준 버전 또는 완료된 주간이 없습니다.</Notice>
       )}
@@ -273,10 +451,12 @@ function DashboardContent({ scope }: { scope: 'ME' | 'TEAM' }) {
             <div className="kpi-grid">
               {metrics.map((m) => {
                 const value = kpis.data[m.key]
+                const baseline = goalBaseline(m.key, goals.data)
                 return (
                   <Card key={m.key}>
                     <p>{m.title}</p>
                     <strong className="kpi-value">{formatNumber(value?.value, m.percent)}</strong>
+                    {baseline && <small>{baseline}</small>}
                     <small>
                       {value?.value == null
                         ? metricStatus(value?.status)

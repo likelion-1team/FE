@@ -222,7 +222,55 @@ export interface FeedbackItem {
 export interface FeedbackList {
   days: { date: string; feedbacks: FeedbackItem[] }[]
 }
+export interface TeamSubmissions {
+  settingsVersion: number | null
+  submittedMembers: number
+  totalMembers: number
+  analyzedConversations: number | null
+  targetCount: number | null
+  coverageRatio: number | null
+  status: 'AVAILABLE' | 'SUPPRESSED'
+}
+export interface TeamGoals {
+  version: number
+  successRateMin: number | null
+  errorReworkRateMax: number | null
+  tokensPerSuccessMax: number | null
+  updatedAt: string | null
+}
+export interface SharePreview {
+  previewId: Id
+  previewVersion: number
+  expiresAt: string
+  redactionStatus: string
+  content: {
+    title: string
+    type: string
+    problem: string
+    improvement: string
+    example: Example
+  }
+}
+export interface OutcomeAssessment {
+  outcome: 'SUCCESS' | 'FAILURE' | 'UNKNOWN'
+  source: string
+  version: number
+  assessedAt: string
+}
+export interface ReworkAssessment {
+  type:
+    | 'ERROR_CORRECTION'
+    | 'REQUIREMENT_CHANGE'
+    | 'EXPRESSION_REFINEMENT'
+    | 'EXPLORATION'
+    | 'NONE'
+    | 'UNKNOWN'
+  source: string
+  version: number
+  assessedAt: string
+}
 export interface FeedbackDetail {
+  itemId?: Id | null
   conversationVersionId: Id | null
   feedbackId: Id
   type: string
@@ -233,6 +281,9 @@ export interface FeedbackDetail {
   example: Example
   reaction?: Reaction | null
   sharing?: { status: string; version: number; sharedCaseId: Id | null }
+  outcomeAssessment?: OutcomeAssessment | null
+  reworkAssessment?: ReworkAssessment | null
+  aiAssessment?: { outcome: string | null; reworkType: string | null } | null
   limitations?: string[]
   evidences: { conversationVersionId: Id; turnIndexes: number[] }[]
 }

@@ -175,6 +175,26 @@ export async function mockApi(
                   total: 1,
                 },
           )
+    if (/\/teams\/\d+\/goals$/.test(path)) {
+      const saved = method === 'PUT' ? req.postDataJSON() : null
+      return reply(route, {
+        version: saved ? saved.expectedVersion + 1 : 0,
+        successRateMin: saved ? saved.successRateMin : null,
+        errorReworkRateMax: saved ? saved.errorReworkRateMax : null,
+        tokensPerSuccessMax: saved ? saved.tokensPerSuccessMax : null,
+        updatedAt: saved ? '2026-11-24T10:20:00+09:00' : null,
+      })
+    }
+    if (/\/teams\/\d+\/submissions$/.test(path))
+      return reply(route, {
+        settingsVersion: 3,
+        submittedMembers: 3,
+        totalMembers: 5,
+        analyzedConversations: 42,
+        targetCount: 120,
+        coverageRatio: 0.35,
+        status: 'AVAILABLE',
+      })
     if (/\/teams\/\d+\/dashboard\/filter-options/.test(path))
       return reply(route, {
         taskTypes: [{ id: 7, name: '주간 보고서 작성' }],

@@ -17,11 +17,16 @@ import type {
   Kpis,
   LoginResult,
   Member,
+  OutcomeAssessment,
   Reaction,
+  ReworkAssessment,
   Settings,
+  SharePreview,
   SettingsInput,
   SharedCase,
   Team,
+  TeamGoals,
+  TeamSubmissions,
   Tokens,
   Trends,
   Upload,
@@ -317,13 +322,37 @@ export const api = {
         ? { method: 'PUT', json: { reaction, ...(reason ? { reason } : {}) } }
         : { method: 'DELETE' },
     ),
-  revokeShare: (id: Id, expectedShareVersion?: number) =>
-    request<{ isShared: boolean }>(`/feedbacks/${id}/share`, {
+  sharePreview: (id: Id) =>
+    request<SharePreview>(`/feedbacks/${id}/share-preview`, {
+      method: 'POST',
+      json: {},
+      validate: live.sharePreview.parse,
+    }),
+  approveShare: (
+    id: Id,
+    body: { expectedShareVersion: number; previewId: Id; previewVersion: number },
+  ) =>
+    request<{ isShared: boolean; shareVersion: number; sharedCaseId: Id | null }>(
+      `/feedbacks/${id}/share`,
+      {
+        method: 'PATCH',
+        json: { shared: true, ...body },
+        validate: (value) => {
+          const raw = release(value, 'shared', live.share, schemas.shareSchema)
+          if (!('shared' in raw)) return { isShared: raw.isShared, shareVersion: 0, sharedCaseId: null }
+          return { isShared: raw.shared, shareVersion: raw.shareVersion, sharedCaseId: raw.sharedCaseId }
+        },
+      },
+    ),
+  revokeShare: (id: Id) =>
+    request<{ isShared: boolean; shareVersion: number }>(`/feedbacks/${id}/share`, {
       method: 'PATCH',
-      json: { shared: false, expectedShareVersion },
+      json: { shared: false },
       validate: (value) => {
         const raw = release(value, 'shared', live.share, schemas.shareSchema)
-        return 'shared' in raw ? { isShared: raw.shared } : raw
+        return 'shared' in raw
+          ? { isShared: raw.shared, shareVersion: raw.shareVersion }
+          : { isShared: raw.isShared, shareVersion: 0 }
       },
     }),
   conversationVersion: (id: Id, feedbackId: string, signal?: AbortSignal) =>
@@ -412,5 +441,42 @@ export const api = {
       method: enabled ? 'PUT' : 'DELETE',
       ...(enabled ? { json: { expectedShareVersion: shareVersion } } : {}),
     }),
+  submissions: (teamId: string, signal?: AbortSignal) =>
+    request<TeamSubmissions>(`/teams/${teamId}/submissions`, {
+      signal,
+      validate: live.submissions.parse,
+    }),
+  goals: (teamId: string, signal?: AbortSignal) =>
+    request<TeamGoals>(`/teams/${teamId}/goals`, { signal, validate: live.goals.parse }),
+  updateGoals: (
+    teamId: string,
+    body: {
+      expectedVersion: number
+      successRateMin: number | null
+      errorReworkRateMax: number | null
+      tokensPerSuccessMax: number | null
+    },
+  ) =>
+    request<TeamGoals>(`/teams/${teamId}/goals`, {
+      method: 'PUT',
+      json: body,
+      validate: live.goals.parse,
+    }),
+  outcome: (
+    itemId: Id,
+    body: { expectedVersion: number; outcome: 'SUCCESS' | 'FAILURE' | 'UNKNOWN'; note?: string },
+  ) =>
+    request<OutcomeAssessment>(
+      `/analysis-items/${itemId}/outcome`,
+      { method: 'PUT', json: body, validate: live.outcome.parse },
+    ),
+  rework: (
+    itemId: Id,
+    body: { expectedVersion: number; type: (typeof live.reworkTypes)[number]; note?: string },
+  ) =>
+    request<ReworkAssessment>(
+      `/analysis-items/${itemId}/rework-assessment`,
+      { method: 'PUT', json: body, validate: live.rework.parse },
+    ),
 }
 export type { Tokens }
