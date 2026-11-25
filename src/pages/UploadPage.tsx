@@ -20,6 +20,8 @@ import {
 } from '../components/ui'
 
 const labels: Record<string, string> = {
+  READY: '선택 대기',
+  EXPIRED: '업로드 만료',
   UPLOADED: '선택 대기',
   ANALYZING: '분석 중',
   DONE: '분석 완료',
@@ -64,7 +66,7 @@ export function UploadPage() {
   })
   const blocked = startBlocked(candidatesQuery.error)
   const uploadMutation = useMutation({
-    mutationFn: (file: File) => api.upload(teamId, file),
+    mutationFn: (file: File) => api.upload(teamId, file, settings.data?.version),
     onSuccess: (data) => {
       if (!isActive()) return
       attempt.current = null
@@ -444,15 +446,19 @@ function UploadProgress({ id }: { id: string }) {
   return (
     <Card>
       <h2>{labels[status.data.status]}</h2>
-      {status.data.status === 'CONSUMED' ? (
-        <Notice>
-          대화 선택이 확정된 업로드입니다. 분석 접수 후 열린 분석 결과 주소에서 진행 상태를
-          확인해주세요. 업로드 이력에는 분석 번호가 제공되지 않습니다.
-        </Notice>
+      {status.data.analysisId != null ? (
+        <Link
+          className="button primary"
+          to={`${base}/history?analysisId=${status.data.analysisId}`}
+        >
+          분석 상태 보기
+        </Link>
+      ) : status.data.status === 'CONSUMED' ? (
+        <Notice>대화 선택이 확정된 업로드입니다. 아래에서 분석 진행 상태를 확인해주세요.</Notice>
       ) : (
         <>
           {status.data.failReason && <Notice tone="error">{status.data.failReason}</Notice>}
-          {['UPLOADED', 'FAILED'].includes(status.data.status) && (
+          {['READY', 'UPLOADED', 'FAILED'].includes(status.data.status) && (
             <Link className="button primary" to={`${base}/upload?uploadId=${id}`}>
               대화 선택 계속하기
             </Link>
@@ -522,12 +528,14 @@ export function HistoryPage() {
                   </span>
                   <Button
                     onClick={() => {
-                      const run = client.getQueryData<Id>([
-                        'team',
-                        teamId,
-                        'analysisForUpload',
-                        String(item.uploadId),
-                      ])
+                      const run =
+                        item.analysisId ??
+                        client.getQueryData<Id>([
+                          'team',
+                          teamId,
+                          'analysisForUpload',
+                          String(item.uploadId),
+                        ])
                       setParams(
                         run == null
                           ? { uploadId: String(item.uploadId) }

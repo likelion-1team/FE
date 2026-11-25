@@ -1,5 +1,7 @@
 import { ApiError, endSession, request, queryString } from './client'
 import * as schemas from './schemas'
+import * as live from './live-contract'
+import { z } from 'zod'
 import type {
   AnalysisStatus,
   AnalysisStart,
@@ -27,6 +29,41 @@ import type {
   User,
 } from './types'
 
+async function allPages<T>(
+  path: string,
+  schema: z.ZodType<{ items: T[]; page: number; size: number; total: number }>,
+  signal?: AbortSignal,
+): Promise<T[]> {
+  const result: T[] = []
+  for (let page = 1; ; page++) {
+    const data = await request(`${path}?page=${page}&size=100`, { signal, validate: schema.parse })
+    result.push(...data.items)
+    if (page * data.size >= data.total) return result
+    if (!data.items.length || page >= 1000)
+      throw new ApiError(200, 'INVALID_RESPONSE', '목록 페이지를 모두 확인할 수 없습니다.')
+  }
+}
+const metricCode: Record<string, string> = {
+  tokensPerSuccess: 'tokensPerConfirmedSuccess',
+  reworkRate: 'errorReworkRate',
+  successRate: 'confirmedSuccessRate',
+}
+function dashboardFilters(filters: Record<string, string>, trends = false) {
+  const result: Record<string, string> = {
+    scope: filters.scope,
+    settingsVersion: filters.settingsVersion,
+  }
+  if (filters.scope === 'TEAM') result.weekStart = filters.weekStart
+  else {
+    result.from = filters.from
+    result.to = filters.to
+  }
+  if (trends) {
+    result.metric = metricCode[filters.metric] || filters.metric
+    result.unit = filters.scope === 'TEAM' ? 'WEEK' : filters.unit
+  }
+  return result
+}
 export const api = {
   login: (email: string, password: string) =>
     request<LoginResult>('/auth/login', {
@@ -57,8 +94,7 @@ export const api = {
   },
   logout: endSession,
   me: () => request<User>('/users/me', { validate: schemas.userSchema.parse }),
-  teams: (signal?: AbortSignal) =>
-    request<Team[]>('/teams', { signal, validate: schemas.teamsSchema.parse }),
+  teams: (signal?: AbortSignal) => allPages<Team>('/teams', live.teamPage, signal),
   createTeam: (name: string, description: string) =>
     request<{ teamId: Id }>('/teams', { method: 'POST', json: { name, description } }),
   settings: (id: string, signal?: AbortSignal) =>
@@ -70,32 +106,82 @@ export const api = {
       validate: schemas.settingsSchema.parse,
     }),
   members: (id: string, signal?: AbortSignal) =>
-    request<Member[]>(`/teams/${id}/members`, { signal, validate: schemas.membersSchema.parse }),
+    allPages<Member>(`/teams/${id}/members`, live.memberPage, signal),
   addMember: (id: string, email: string) =>
     request(`/teams/${id}/members`, { method: 'POST', json: { email } }),
-  options: (id: string, signal?: AbortSignal) =>
-    request<FilterOptions>(`/teams/${id}/filter-options`, {
+  options: async (id: string, signal?: AbortSignal, scope = 'ME'): Promise<FilterOptions> => {
+    const raw = await request(`/teams/${id}/dashboard/filter-options?scope=${scope}`, {
       signal,
-      validate: schemas.optionsSchema.parse,
-    }),
+      validate: live.options.or(schemas.optionsSchema).parse,
+    })
+    if (!('settingsVersions' in raw)) return raw
+    const settings = await api.settings(id, signal)
+    return {
+      ...raw,
+      taskTypes: raw.taskTypes.map((t) => ({ id: t.taskTypeId, name: t.name })),
+      models: raw.allowedModels,
+      dataFrom: settings.targetFrom,
+      dataTo: settings.targetTo,
+      settingsVersion: settings.version,
+    }
+  },
   kpis: (id: string, filters: Record<string, string>, signal?: AbortSignal) =>
-    request<Kpis>(`/teams/${id}/dashboard/kpis${queryString(filters)}`, {
+    request<Kpis>(`/teams/${id}/dashboard/kpis${queryString(dashboardFilters(filters))}`, {
       signal,
-      validate: schemas.kpisSchema.parse,
+      validate: (value) => {
+        const raw = live.kpis.or(schemas.kpisSchema).parse(value)
+        if (!('metrics' in raw)) return raw
+        const find = (code: string) => {
+          const m = raw.metrics.find((m) => m.code === code)
+          if (!m) throw new Error('필수 지표 누락')
+          return {
+            ...m,
+            value: m.status === 'AVAILABLE' ? m.value : null,
+            estimated: m.valueSource === 'TOKENIZER_ESTIMATE',
+          }
+        }
+        return {
+          from: filters.from || '',
+          to: filters.to || '',
+          tokensPerSuccess: find('tokensPerConfirmedSuccess'),
+          reworkRate: find('errorReworkRate'),
+          successRate: find('confirmedSuccessRate'),
+          conversationCount: { value: raw.coverage?.inScopeCount ?? null },
+          cohortCoverage: raw.coverage,
+        }
+      },
     }),
   trends: (id: string, filters: Record<string, string>, signal?: AbortSignal) =>
-    request<Trends>(`/teams/${id}/dashboard/trends${queryString(filters)}`, {
-      signal,
-      validate: schemas.trendsSchema.parse,
-    }),
-  upload: (id: string, file: File) => {
+    request<Trends>(
+      `/teams/${id}/dashboard/trends${queryString(dashboardFilters(filters, true))}`,
+      {
+        signal,
+        validate: (value) => {
+          const raw = live.trends.or(schemas.trendsSchema).parse(value)
+          if (!('scope' in raw)) return raw
+          return {
+            metric: filters.metric,
+            estimated: filters.metric === 'tokensPerSuccess',
+            points: raw.points.map((p) => ({
+              date: p.periodStart,
+              value: p.metric.status === 'AVAILABLE' ? p.metric.value : null,
+              conversationCount: p.metric.sampleSize,
+              status: p.metric.status,
+              insufficientSample: p.metric.status !== 'AVAILABLE',
+            })),
+          }
+        },
+      },
+    ),
+  upload: (id: string, file: File, settingsVersion?: number) => {
     const body = new FormData()
     body.set('file', file)
+    if (settingsVersion != null) body.set('settingsVersion', String(settingsVersion))
     return request<Upload>(`/teams/${id}/uploads`, {
       method: 'POST',
       body,
       timeoutMs: 90000,
-      validate: schemas.uploadSchema.parse,
+      validate: live.upload.or(schemas.uploadSchema).parse,
     })
   },
   candidates: (id: Id, page: number, search: string, signal?: AbortSignal) =>
@@ -128,20 +214,63 @@ export const api = {
   analysisStatus: (id: string, signal?: AbortSignal) =>
     request<AnalysisStatus>(`/uploads/${id}`, {
       signal,
-      validate: schemas.analysisStatusSchema.parse,
+      validate: (value) => {
+        const raw = live.uploadStatus.or(schemas.analysisStatusSchema).parse(value)
+        return 'uploadId' in raw ? { ...raw, progress: 0 } : raw
+      },
     }),
   history: (id: string, page: number, signal?: AbortSignal) =>
-    request<UploadHistory>(`/teams/${id}/uploads?page=${page}&size=10`, {
+    request<UploadHistory>(`/teams/${id}/uploads?page=${page + 1}&size=10`, {
       signal,
-      validate: schemas.historySchema.parse,
+      validate: (value) => {
+        const raw = live.history.or(schemas.historySchema).parse(value)
+        return 'items' in raw
+          ? {
+              content: raw.items.map((x) => ({
+                uploadId: x.uploadId,
+                analysisId: x.analysisId,
+                uploadedAt: x.createdAt,
+                analyzedCount: x.succeededCount,
+                period: x.targetFrom && x.targetTo ? { from: x.targetFrom, to: x.targetTo } : null,
+                status: x.analysisStatus || x.status,
+              })),
+              page: raw.page - 1,
+              size: raw.size,
+              totalElements: raw.total,
+            }
+          : raw
+      },
     }),
   feedbacks: (id: string, filters: Record<string, string | number>, signal?: AbortSignal) =>
-    request<FeedbackList>(`/teams/${id}/feedbacks${queryString(filters)}`, {
-      signal,
-      validate: schemas.feedbackListSchema.parse,
-    }),
+    request<FeedbackList>(
+      `/teams/${id}/feedbacks${queryString({ ...filters, page: Number(filters.page || 0) + 1, type: filters.types, types: undefined, sort: filters.sort })}`,
+      {
+        signal,
+        validate: (value) => {
+          const raw = live.feedbacks.or(schemas.feedbackListSchema).parse(value)
+          return 'items' in raw
+            ? {
+                days: raw.items.map((x) => ({
+                  date: x.createdAt,
+                  feedbacks: [
+                    { ...x, myReaction: x.reaction, isShared: x.sharingStatus === 'SHARED' },
+                  ],
+                })),
+              }
+            : raw
+        },
+      },
+    ),
   feedback: (id: string, signal?: AbortSignal) =>
-    request<FeedbackDetail>(`/feedbacks/${id}`, { signal, validate: schemas.feedbackSchema.parse }),
+    request<FeedbackDetail>(`/feedbacks/${id}`, {
+      signal,
+      validate: (value) => {
+        const raw = live.feedback.or(schemas.feedbackSchema).parse(value)
+        return 'conversationId' in raw
+          ? { ...raw, evidences: [{ conversationId: raw.conversationId, turnIndexes: [] }] }
+          : raw
+      },
+    }),
   reaction: (id: Id, reaction: Reaction | null, reason?: string) =>
     request(
       `/feedbacks/${id}/reaction`,
@@ -149,28 +278,66 @@ export const api = {
         ? { method: 'PUT', json: { reaction, ...(reason ? { reason } : {}) } }
         : { method: 'DELETE' },
     ),
-  revokeShare: (id: Id) =>
+  revokeShare: (id: Id, expectedShareVersion?: number) =>
     request<{ isShared: boolean }>(`/feedbacks/${id}/share`, {
       method: 'PATCH',
-      json: { shared: false },
-      validate: schemas.shareSchema.parse,
+      json: { shared: false, expectedShareVersion },
+      validate: (value) => {
+        const raw = live.share.or(schemas.shareSchema).parse(value)
+        return 'shared' in raw ? { isShared: raw.shared } : raw
+      },
     }),
   conversation: (id: Id, feedbackId: string, signal?: AbortSignal) =>
     request<Conversation>(`/conversations/${id}?highlightFeedbackId=${feedbackId}`, {
       signal,
-      validate: schemas.conversationSchema.parse,
+      validate: (value) => {
+        const raw = live.conversation.or(schemas.conversationSchema).parse(value)
+        return 'highlightMessageIds' in raw
+          ? {
+              title: raw.title,
+              startedAt: raw.startedAt,
+              model: '',
+              messages: raw.messages.map((m, i) => ({ ...m, idx: i })),
+              highlightIndexes: raw.messages.flatMap((m, i) =>
+                raw.highlightMessageIds.includes(m.messageId) ? [i] : [],
+              ),
+            }
+          : raw
+      },
     }),
   sharedCases: (id: string, type: string, signal?: AbortSignal) =>
     request<{ items: SharedCase[] }>(`/teams/${id}/shared-cases${queryString({ type })}`, {
       signal,
-      validate: schemas.sharedCasesSchema.parse,
+      validate: (value) => {
+        const raw = live.shared.or(schemas.sharedCasesSchema).parse(value)
+        return {
+          items: raw.items.map((x) =>
+            'sharedCaseId' in x
+              ? { ...x, feedbackId: x.sharedCaseId, taskType: String(x.taskTypeId) }
+              : x,
+          ),
+        }
+      },
     }),
   guides: (id: string, type: string, signal?: AbortSignal) =>
     request<Guides>(`/teams/${id}/guides${queryString({ type })}`, {
       signal,
-      validate: schemas.guidesSchema.parse,
+      validate: (value) => {
+        const raw = live.shared.or(schemas.guidesSchema).parse(value)
+        return 'items' in raw
+          ? {
+              groups: raw.items.map((x) => ({
+                type: x.type,
+                guides: [{ ...x, feedbackId: x.sharedCaseId, guideAddedAt: '' }],
+              })),
+            }
+          : raw
+      },
     }),
-  guide: (id: Id, enabled: boolean) =>
-    request(`/feedbacks/${id}/guide`, { method: enabled ? 'PUT' : 'DELETE' }),
+  guide: (id: Id, enabled: boolean, teamId?: string, shareVersion?: number) =>
+    request(`/teams/${teamId}/guides/${id}`, {
+      method: enabled ? 'PUT' : 'DELETE',
+      ...(enabled ? { json: { expectedShareVersion: shareVersion } } : {}),
+    }),
 }
 export type { Tokens }

@@ -19,11 +19,26 @@ import {
 } from '../components/ui'
 
 const metrics = [
-  { key: 'tokensPerSuccess', title: '성공 업무당 토큰', percent: false },
-  { key: 'reworkRate', title: '재작업률', percent: true },
-  { key: 'successRate', title: '업무 성공률', percent: true },
+  { key: 'tokensPerSuccess', title: '확인된 성공 업무당 토큰', percent: false },
+  { key: 'reworkRate', title: '오류 수정 재작업률', percent: true },
+  { key: 'successRate', title: '본인 확인 성공률', percent: true },
 ] as const
 
+function metricStatus(status?: string) {
+  return (
+    (
+      {
+        SUPPRESSED: '기여 인원·공개 정책에 따라 비공개',
+        NOT_COMPARABLE: '서로 다른 기준으로 비교 불가',
+        NO_DATA: '대상 데이터 없음',
+        NOT_MEASURED: '미측정',
+        ZERO_DENOMINATOR: '분모 없음',
+        INSUFFICIENT_SAMPLE: '표본 부족',
+        INSUFFICIENT_CONFIRMATION: '본인 확인율 부족',
+      } as Record<string, string>
+    )[status || ''] || '측정 자료 또는 분모가 부족합니다.'
+  )
+}
 export function TrendChart({ data }: { data: Trends }) {
   const valid = data.points.filter((p) => p.value != null && !p.insufficientSample)
   if (!valid.length)
@@ -81,13 +96,13 @@ export function TrendChart({ data }: { data: Trends }) {
                 <td>{p.date}</td>
                 <td>
                   {p.insufficientSample
-                    ? '표본 부족'
+                    ? metricStatus(p.status)
                     : formatNumber(
                         p.value,
                         data.metric === 'successRate' || data.metric === 'reworkRate',
                       )}
                 </td>
-                <td>{p.conversationCount}</td>
+                <td>{p.conversationCount ?? '비공개·미측정'}</td>
               </tr>
             ))}
           </tbody>
@@ -100,14 +115,16 @@ export function TrendChart({ data }: { data: Trends }) {
 export function DashboardPage({ scope = 'ME' }: { scope?: 'ME' | 'TEAM' }) {
   const { teamId, leader, base } = useWorkspace()
   const options = useQuery({
-    queryKey: ['team', teamId, 'options'],
-    queryFn: ({ signal }) => api.options(teamId, signal),
+    queryKey: ['team', teamId, 'options', scope],
+    queryFn: ({ signal }) => api.options(teamId, signal, scope),
   })
   const [draft, setDraft] = useState({
     from: '',
     to: '',
     unit: scope === 'TEAM' ? 'WEEK' : 'DAY',
     taskTypes: '',
+    weekStart: '',
+    settingsVersion: '',
   })
   const [applied, setApplied] = useState(draft)
   const [metric, setMetric] = useState('tokensPerSuccess')
@@ -117,16 +134,22 @@ export function DashboardPage({ scope = 'ME' }: { scope?: 'ME' | 'TEAM' }) {
     unit: applied.unit,
     taskTypes: applied.taskTypes,
     scope,
+    weekStart: applied.weekStart || options.data?.availableWeeks?.[0]?.weekStart || '',
+    settingsVersion: applied.settingsVersion || String(options.data?.settingsVersion ?? ''),
   }
+  const ready =
+    options.isSuccess &&
+    (scope !== 'TEAM' || !options.data.availableWeeks || !!dates.weekStart) &&
+    (!options.data.settingsVersions || options.data.settingsVersions.length > 0)
   const kpis = useQuery({
     queryKey: ['team', teamId, 'kpis', dates],
     queryFn: ({ signal }) => api.kpis(teamId, dates, signal),
-    enabled: options.isSuccess,
+    enabled: ready,
   })
   const trends = useQuery({
     queryKey: ['team', teamId, 'trends', dates, metric],
     queryFn: ({ signal }) => api.trends(teamId, { ...dates, metric }, signal),
-    enabled: options.isSuccess,
+    enabled: ready,
   })
   const [invalidDates, setInvalidDates] = useState(false)
   return (
@@ -163,34 +186,53 @@ export function DashboardPage({ scope = 'ME' }: { scope?: 'ME' | 'TEAM' }) {
             setApplied({ ...draft, from, to })
           }}
         >
-          <Field label="시작일">
-            <input
-              type="date"
-              required
-              value={draft.from || dates.from}
-              onChange={(e) => setDraft({ ...draft, from: e.target.value })}
-            />
-          </Field>
-          <Field label="종료일">
-            <input
-              type="date"
-              required
-              min={draft.from || dates.from}
-              value={draft.to || dates.to}
-              onChange={(e) => setDraft({ ...draft, to: e.target.value })}
-            />
-          </Field>
-          <Field label="업무 유형">
+          {scope === 'ME' ? (
+            <>
+              <Field label="시작일">
+                <input
+                  type="date"
+                  required
+                  value={draft.from || dates.from}
+                  onChange={(e) => setDraft({ ...draft, from: e.target.value })}
+                />
+              </Field>
+              <Field label="종료일">
+                <input
+                  type="date"
+                  required
+                  min={draft.from || dates.from}
+                  value={draft.to || dates.to}
+                  onChange={(e) => setDraft({ ...draft, to: e.target.value })}
+                />
+              </Field>
+            </>
+          ) : (
+            <Field label="완료된 주간">
+              <select
+                value={draft.weekStart || dates.weekStart}
+                onChange={(e) => setDraft({ ...draft, weekStart: e.target.value })}
+              >
+                {options.data.availableWeeks?.map((week) => (
+                  <option key={week.weekStart} value={week.weekStart}>
+                    {week.weekStart}–{week.weekEnd}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          )}
+          <Field label="분석 기준 버전">
             <select
-              value={draft.taskTypes}
-              onChange={(e) => setDraft({ ...draft, taskTypes: e.target.value })}
+              value={draft.settingsVersion || dates.settingsVersion}
+              onChange={(e) => setDraft({ ...draft, settingsVersion: e.target.value })}
             >
-              <option value="">전체 업무</option>
-              {options.data.taskTypes.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
+              {(options.data.settingsVersions || [options.data.settingsVersion]).map(
+                (version) =>
+                  version != null && (
+                    <option key={version} value={version}>
+                      버전 {version}
+                    </option>
+                  ),
+              )}
             </select>
           </Field>
           <Field label="집계 단위">
@@ -198,7 +240,7 @@ export function DashboardPage({ scope = 'ME' }: { scope?: 'ME' | 'TEAM' }) {
               value={draft.unit}
               onChange={(e) => setDraft({ ...draft, unit: e.target.value })}
             >
-              <option value="DAY">일별</option>
+              {scope === 'ME' && <option value="DAY">일별</option>}
               <option value="WEEK">주간</option>
             </select>
           </Field>
@@ -209,10 +251,13 @@ export function DashboardPage({ scope = 'ME' }: { scope?: 'ME' | 'TEAM' }) {
       )}
       {invalidDates && <Notice tone="error">종료일은 시작일 이후여야 합니다.</Notice>}
       <FeaturePending title="팀 목표">
-        목표 설정과 확인 기반 성과 지표는 준비 중입니다. 아래 수치는 현재 대화 분석 기준이며, 실제
-        업무 완료를 확인한 결과와는 다릅니다.
+        목표 편집 화면은 준비 중입니다. 아래 지표는 본인 확인 결과를 집계하며 토큰 수는 토크나이저
+        추정값입니다. 팀 지표는 완료된 주간과 서버의 기여 인원·표본·확인율 정책을 적용합니다.
       </FeaturePending>
-      {options.isSuccess &&
+      {options.isSuccess && !ready && (
+        <Notice>조회 가능한 기준 버전 또는 완료된 주간이 없습니다.</Notice>
+      )}
+      {ready &&
         (kpis.isPending ? (
           <Loading />
         ) : kpis.isError ? (
@@ -228,15 +273,23 @@ export function DashboardPage({ scope = 'ME' }: { scope?: 'ME' | 'TEAM' }) {
                     <strong className="kpi-value">{formatNumber(value?.value, m.percent)}</strong>
                     <small>
                       {value?.value == null
-                        ? '측정 자료 또는 분모가 부족합니다.'
+                        ? metricStatus(value?.status)
                         : value.estimated
                           ? '대화 분석 기반 추정치'
-                          : '현재 분석 기준 집계'}
+                          : '본인 확인 결과 집계'}
                     </small>
                   </Card>
                 )
               })}
             </div>
+            {kpis.data.cohortCoverage && (
+              <Notice>
+                선택 {kpis.data.cohortCoverage.selectedCount}건 · 집계 대상{' '}
+                {kpis.data.cohortCoverage.inScopeCount}건 · 결과 확인{' '}
+                {kpis.data.cohortCoverage.outcomeConfirmedCount}건 · 재작업 확인{' '}
+                {kpis.data.cohortCoverage.reworkConfirmedCount}건
+              </Notice>
+            )}
             {scope === 'TEAM' && leader && kpis.data.coverage && (
               <Notice>
                 제출 {kpis.data.coverage.submittedMembers} / {kpis.data.coverage.totalMembers}명 ·

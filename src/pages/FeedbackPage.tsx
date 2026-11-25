@@ -203,7 +203,8 @@ export function FeedbackDetailPage() {
     [revoked, setRevoked] = useState(false),
     [copyMessage, setCopyMessage] = useState(''),
     [copyError, setCopyError] = useState(false)
-  const currentReaction = reactionOverride === undefined ? item?.myReaction : reactionOverride
+  const currentReaction =
+    reactionOverride === undefined ? (query.data?.reaction ?? item?.myReaction) : reactionOverride
   function patchList(update: Partial<FeedbackItem>) {
     client.setQueriesData<FeedbackList>({ queryKey: ['team', teamId, 'feedbacks'] }, (old) =>
       old
@@ -228,7 +229,7 @@ export function FeedbackDetailPage() {
     },
   })
   const share = useMutation({
-    mutationFn: () => api.revokeShare(feedbackId),
+    mutationFn: () => api.revokeShare(feedbackId, query.data?.sharing?.version),
     onSuccess: async () => {
       setRevoked(true)
       setRevoke(false)

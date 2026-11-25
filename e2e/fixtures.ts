@@ -113,7 +113,8 @@ export async function mockApi(
     if (path === '/auth/signup') return reply(route, { userId: 1 }, 201)
     if (path === '/auth/logout') return route.fulfill({ status: 204 })
     if (path === '/users/me') return reply(route, user)
-    if (path === '/teams' && method === 'GET') return reply(route, teams)
+    if (path === '/teams' && method === 'GET')
+      return reply(route, { items: teams, page: 1, size: 100, total: teams.length })
     if (path === '/teams' && method === 'POST') return reply(route, { teamId: 3 }, 201)
     if (/\/teams\/\d+\/settings/.test(path))
       return reply(
@@ -134,9 +135,14 @@ export async function mockApi(
             route,
             method === 'POST'
               ? { userId: 3, name: '새 팀원', role: 'MEMBER' }
-              : [{ ...user, role: 'LEADER', submitted: true }],
+              : {
+                  items: [{ ...user, role: 'LEADER', submitted: true }],
+                  page: 1,
+                  size: 100,
+                  total: 1,
+                },
           )
-    if (/\/teams\/\d+\/filter-options/.test(path))
+    if (/\/teams\/\d+\/dashboard\/filter-options/.test(path))
       return reply(route, {
         taskTypes: [{ id: 7, name: '주간 보고서 작성' }],
         models: [],
@@ -262,7 +268,7 @@ export async function mockApi(
         ? route.fulfill({ status: 204 })
         : reply(route, { reaction: req.postDataJSON().reaction })
     if (path === '/feedbacks/11/share') return reply(route, { isShared: req.postDataJSON().shared })
-    if (path === '/feedbacks/11/guide')
+    if (path === '/teams/2/guides/11')
       return method === 'DELETE' ? route.fulfill({ status: 204 }) : reply(route, { isGuide: true })
     if (path === '/conversations/21')
       return reply(route, {

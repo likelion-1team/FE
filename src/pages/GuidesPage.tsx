@@ -138,7 +138,8 @@ export function SharedCasesPage() {
     enabled: leader,
   })
   const mutation = useMutation({
-    mutationFn: (item: SharedCase) => api.guide(item.feedbackId, !item.isGuide),
+    mutationFn: (item: SharedCase) =>
+      api.guide(item.sharedCaseId ?? item.feedbackId, !item.isGuide, teamId, item.shareVersion),
     onSuccess: async () => {
       setSelected(null)
       await client.invalidateQueries({ queryKey: ['team', teamId, 'shared'] })
