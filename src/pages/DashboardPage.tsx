@@ -123,7 +123,8 @@ function parseRatio(text: string) {
 function parseTokens(text: string) {
   if (!text.trim()) return null
   const value = Number(text)
-  if (!Number.isInteger(value) || value < 1) throw new Error('토큰 상한은 1 이상의 정수여야 합니다.')
+  if (!Number.isInteger(value) || value < 1)
+    throw new Error('토큰 상한은 1 이상의 정수여야 합니다.')
   return value
 }
 function goalRatio(value: number | null) {
@@ -141,7 +142,8 @@ function goalBaseline(
   },
 ) {
   if (!goals) return null
-  if (key === 'successRate' && goals.successRateMin != null) return `목표 ${goalRatio(goals.successRateMin)} 이상`
+  if (key === 'successRate' && goals.successRateMin != null)
+    return `목표 ${goalRatio(goals.successRateMin)} 이상`
   if (key === 'reworkRate' && goals.errorReworkRateMax != null)
     return `목표 ${goalRatio(goals.errorReworkRateMax)} 이하`
   if (key === 'tokensPerSuccess' && goals.tokensPerSuccessMax != null)
@@ -265,10 +267,14 @@ function GoalsPanel({ teamId, canEdit }: { teamId: string; canEdit: boolean }) {
                   goals.data.successRateMin == null ? '' : String(goals.data.successRateMin),
                 )
                 setErrorReworkRateMax(
-                  goals.data.errorReworkRateMax == null ? '' : String(goals.data.errorReworkRateMax),
+                  goals.data.errorReworkRateMax == null
+                    ? ''
+                    : String(goals.data.errorReworkRateMax),
                 )
                 setTokensPerSuccessMax(
-                  goals.data.tokensPerSuccessMax == null ? '' : String(goals.data.tokensPerSuccessMax),
+                  goals.data.tokensPerSuccessMax == null
+                    ? ''
+                    : String(goals.data.tokensPerSuccessMax),
                 )
                 save.reset()
                 setEditing(true)
@@ -316,7 +322,13 @@ function DashboardContent({ scope }: { scope: 'ME' | 'TEAM' }) {
     unit: applied.unit,
     taskTypes: applied.taskTypes,
     scope,
-    weekStart: applied.weekStart || options.data?.availableWeeks?.[0]?.weekStart || '',
+    weekStart:
+      applied.weekStart ||
+      (options.data?.availableWeeks
+        ?.map((week) => week.weekStart)
+        .sort()
+        .at(-1) ??
+        ''),
     settingsVersion: applied.settingsVersion || String(options.data?.settingsVersion ?? ''),
   }
   const ready =

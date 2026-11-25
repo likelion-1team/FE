@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api/service'
@@ -235,8 +235,20 @@ function FeedbackDetailContent() {
     [reworkNote, setReworkNote] = useState(''),
     [reworkMessage, setReworkMessage] = useState(''),
     [preview, setPreview] = useState<SharePreview | null>(null),
+    [previewShareVersion, setPreviewShareVersion] = useState(0),
+    [now, setNow] = useState(Date.now),
     [shareMessage, setShareMessage] = useState(''),
     [shareVersionOverride, setShareVersionOverride] = useState<number | null>(null)
+  useEffect(() => {
+    if (!preview) return
+    const timer = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [preview])
+  const previewExpired = preview != null && Date.parse(preview.expiresAt) <= now
+  function refreshMetrics() {
+    for (const key of ['kpis', 'trends', 'options', 'submissions'])
+      void client.invalidateQueries({ queryKey: ['team', teamId, key] })
+  }
   const currentReaction =
     reactionOverride === undefined
       ? query.data && 'reaction' in query.data
@@ -280,6 +292,7 @@ function FeedbackDetailContent() {
     },
     onSuccess: async (saved) => {
       setSavedOutcome(saved)
+      refreshMetrics()
       setOutcomeNote('')
       setOutcomeMessage(
         saved.outcome === 'UNKNOWN'
@@ -300,6 +313,7 @@ function FeedbackDetailContent() {
     },
     onSuccess: async (saved) => {
       setSavedRework(saved)
+      refreshMetrics()
       setReworkType(saved.type)
       setReworkNote('')
       setReworkMessage(
@@ -313,22 +327,31 @@ function FeedbackDetailContent() {
     },
   })
   const previewShare = useMutation({
-    mutationFn: () => api.sharePreview(feedbackId),
+    mutationFn: async () => {
+      const version = shareVersionOverride ?? query.data?.sharing?.version ?? 0
+      return { preview: await api.sharePreview(feedbackId), version }
+    },
     onSuccess: (value) => {
-      setPreview(value)
+      setPreview(value.preview)
+      setPreviewShareVersion(value.version)
+      setNow(Date.now())
       setShareMessage('')
     },
   })
   const approveShare = useMutation({
     mutationFn: () => {
       if (!preview) throw new Error('공유 미리보기가 없습니다.')
+      if (preview.redactionStatus !== 'PASSED' || Date.parse(preview.expiresAt) <= Date.now())
+        throw new Error('미리보기가 만료됐습니다. 닫은 뒤 새 미리보기를 만들어주세요.')
       return api.approveShare(feedbackId, {
-        expectedShareVersion: shareVersionOverride ?? query.data?.sharing?.version ?? 0,
+        expectedShareVersion: previewShareVersion,
         previewId: preview.previewId,
         previewVersion: preview.previewVersion,
       })
     },
-    onSuccess: async () => {
+    onSuccess: async (saved) => {
+      setRevoked(false)
+      setShareVersionOverride(saved.shareVersion)
       setPreview(null)
       setShareMessage('공유를 승인했습니다.')
       patchList({ isShared: true })
@@ -410,28 +433,28 @@ function FeedbackDetailContent() {
           <strong className="success">미측정</strong>
           <p>검증된 절감 근거가 없습니다.</p>
           {!sharedNow && (
-              <>
-                <p>
-                  새 공유는 가려진 미리보기를 확인한 뒤에만 승인됩니다. 미리보기는 30분 동안, 한 번만
-                  쓸 수 있습니다.
-                </p>
-                <Button disabled={previewShare.isPending} onClick={() => previewShare.mutate()}>
-                  {previewShare.isPending ? '미리보기 만드는 중…' : '공유 미리보기'}
-                </Button>
-                <ErrorMessage error={previewShare.error} />
-                {shareMessage && <Notice>{shareMessage}</Notice>}
-              </>
-            )}
-          {sharedNow && (
-              <Button
-                onClick={() => {
-                  share.reset()
-                  setRevoke(true)
-                }}
-              >
-                기존 공유 철회
+            <>
+              <p>
+                새 공유는 가려진 미리보기를 확인한 뒤에만 승인됩니다. 미리보기는 30분 동안, 한 번만
+                쓸 수 있습니다.
+              </p>
+              <Button disabled={previewShare.isPending} onClick={() => previewShare.mutate()}>
+                {previewShare.isPending ? '미리보기 만드는 중…' : '공유 미리보기'}
               </Button>
-            )}
+              <ErrorMessage error={previewShare.error} />
+            </>
+          )}
+          {sharedNow && (
+            <Button
+              onClick={() => {
+                share.reset()
+                setRevoke(true)
+              }}
+            >
+              기존 공유 철회
+            </Button>
+          )}
+          {shareMessage && <Notice>{shareMessage}</Notice>}
           {revoked && (
             <Notice>공유를 철회했습니다. 다시 공유하려면 새 미리보기가 필요합니다.</Notice>
           )}
@@ -484,10 +507,14 @@ function FeedbackDetailContent() {
       </Card>
       <div className="notice">
         <h2>업무가 실제로 성공했는지 확인해주세요</h2>
-        <p>성공률은 여기서 확인한 성공·실패만 분모로 씁니다. 모름은 저장되지만 분모에서 빠집니다.</p>
+        <p>
+          성공률은 여기서 확인한 성공·실패만 분모로 씁니다. 모름은 저장되지만 분모에서 빠집니다.
+        </p>
         {data.aiAssessment?.outcome && (
           <p className="muted">
-            AI 추정은 {outcomeLabels[data.aiAssessment.outcome as keyof typeof outcomeLabels] ?? data.aiAssessment.outcome}
+            AI 추정은{' '}
+            {outcomeLabels[data.aiAssessment.outcome as keyof typeof outcomeLabels] ??
+              data.aiAssessment.outcome}
             입니다. 아래 저장값과는 따로 둡니다.
           </p>
         )}
@@ -533,15 +560,19 @@ function FeedbackDetailContent() {
           </>
         )}
         <h2>다시 요청한 이유를 골라주세요</h2>
-        <p>오류 재작업률의 분자는 오류 수정만 셉니다. 오류 수정이 있었다면 그 이유를 우선 골라주세요.</p>
+        <p>
+          오류 재작업률의 분자는 오류 수정만 셉니다. 오류 수정이 있었다면 그 이유를 우선 골라주세요.
+        </p>
         {data.aiAssessment?.reworkType && (
           <p className="muted">
-            AI 추정 이유는 {reworkLabel(data.aiAssessment.reworkType)}입니다. 저장값과는 따로 둡니다.
+            AI 추정 이유는 {reworkLabel(data.aiAssessment.reworkType)}입니다. 저장값과는 따로
+            둡니다.
           </p>
         )}
         {reworkAssessment ? (
           <p>
-            저장된 재작업 이유 {reworkLabel(reworkAssessment.type)} · 버전 {reworkAssessment.version}
+            저장된 재작업 이유 {reworkLabel(reworkAssessment.type)} · 버전{' '}
+            {reworkAssessment.version}
           </p>
         ) : (
           <p>아직 재작업 이유를 확인하지 않았습니다.</p>
@@ -605,8 +636,16 @@ function FeedbackDetailContent() {
           <h3>개선 후</h3>
           <p className="pre-wrap">{preview.content.example.after}</p>
           <p className="muted">만료 {preview.expiresAt}</p>
+          {previewExpired && (
+            <Notice tone="error">
+              미리보기가 만료됐습니다. 닫은 뒤 새 미리보기를 만들어주세요.
+            </Notice>
+          )}
           <ErrorMessage error={approveShare.error} />
-          <Button disabled={approveShare.isPending} onClick={() => approveShare.mutate()}>
+          <Button
+            disabled={approveShare.isPending || previewExpired}
+            onClick={() => approveShare.mutate()}
+          >
             {approveShare.isPending ? '승인 중…' : '이 내용으로 공유'}
           </Button>
         </Modal>

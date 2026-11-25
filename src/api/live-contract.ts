@@ -195,8 +195,10 @@ export const goals = z.object({
 export const sharePreview = z.object({
   previewId: id,
   previewVersion: count,
-  expiresAt: z.string(),
-  redactionStatus: z.string(),
+  expiresAt: z
+    .string()
+    .refine((value) => Number.isFinite(Date.parse(value)), 'Invalid preview expiry'),
+  redactionStatus: z.literal('PASSED'),
   content: z.object({
     title: z.string(),
     type: z.string(),

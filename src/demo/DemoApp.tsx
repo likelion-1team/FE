@@ -126,7 +126,7 @@ export default function DemoApp() {
         </div>
       </header>
       <div className="demo-banner" role="note">
-        합성 데이터 전용 데모 · 서버 요청·운영 데이터 저장 없음 · 새로고침하면 초기화됩니다.
+        샘플 데이터로 체험 중입니다. 새로고침하면 처음부터 시작합니다.
       </div>
       <div className="demo-layout">
         <nav className="demo-nav" aria-label="데모 메뉴">
@@ -151,20 +151,16 @@ export default function DemoApp() {
           {screen === 'upload' && (
             <>
               <Card>
-                <h2>시연용 분석 기준 · 버전 1</h2>
+                <h2>분석할 업무</h2>
                 <p>업무: 영업 제안 이메일 · 대상 기간: 2026.11.01–11.30</p>
                 <p>성공 조건: 고객·가격·체험 조건을 유지하고 제목과 본문을 제공합니다.</p>
-                <small>대화만으로 실제 발송 결과는 확정하지 않습니다.</small>
               </Card>
               <Card>
-                <h2>합성 파일 준비</h2>
-                <p>
-                  가상 대화 3건을 제공합니다. 데모 JSON은 합성 대화를 선택하는 표식만 포함하며 실제
-                  대화 파일을 받지 않습니다.
-                </p>
+                <h2>대화 불러오기</h2>
+                <p>샘플 대화 3건으로 업로드부터 피드백 확인까지 체험해보세요.</p>
                 <div className="demo-actions">
-                  <Button onClick={download}>데모 파일 다운로드</Button>
                   <Button
+                    variant="primary"
                     onClick={() => {
                       reading.current++
                       setLoaded(true)
@@ -173,22 +169,27 @@ export default function DemoApp() {
                     }}
                     disabled={running}
                   >
-                    내장 합성 파일 불러오기
+                    샘플 대화 불러오기
                   </Button>
                 </div>
-                <Field label="데모 JSON 파일 선택">
-                  <input
-                    ref={fileInput}
-                    type="file"
-                    accept=".json,application/json"
-                    disabled={running}
-                    onChange={(event) => void readFile(event.target.files?.[0])}
-                  />
-                </Field>
+                <details className="demo-options">
+                  <summary>파일로 업로드 체험하기</summary>
+                  <p>데모 파일을 내려받은 뒤 선택해주세요.</p>
+                  <Button onClick={download}>데모 파일 다운로드</Button>
+                  <Field label="데모 파일 선택">
+                    <input
+                      ref={fileInput}
+                      type="file"
+                      accept=".json,application/json"
+                      disabled={running}
+                      onChange={(event) => void readFile(event.target.files?.[0])}
+                    />
+                  </Field>
+                </details>
                 {error && <Notice tone="error">{error}</Notice>}
                 {loaded && (
                   <>
-                    <h3>분석할 합성 대화 선택</h3>
+                    <h3>분석할 대화를 선택하세요</h3>
                     {cases.map((item) => (
                       <label className="demo-candidate" key={item.id}>
                         <input
@@ -204,22 +205,25 @@ export default function DemoApp() {
                           }
                         />
                         {item.title}
-                        <small>{item.type} · 합성 대화</small>
+                        <small>샘플 대화</small>
                       </label>
                     ))}
                   </>
                 )}
-                <Field label="분석 시나리오">
-                  <select
-                    value={scenario}
-                    disabled={running}
-                    onChange={(event) => setScenario(event.target.value as Scenario)}
-                  >
-                    <option value="success">모두 성공</option>
-                    <option value="partial">부분 성공 (2건 이상 선택)</option>
-                    <option value="failure">서버 모델 설정 실패</option>
-                  </select>
-                </Field>
+                <details className="demo-options">
+                  <summary>다른 분석 결과 체험하기</summary>
+                  <Field label="분석 시나리오">
+                    <select
+                      value={scenario}
+                      disabled={running}
+                      onChange={(event) => setScenario(event.target.value as Scenario)}
+                    >
+                      <option value="success">모두 성공</option>
+                      <option value="partial">부분 성공 (2건 이상 선택)</option>
+                      <option value="failure">서버 모델 설정 실패</option>
+                    </select>
+                  </Field>
+                </details>
                 <Button
                   variant="primary"
                   disabled={
@@ -245,13 +249,13 @@ export default function DemoApp() {
               {!run ? (
                 <>
                   <h2>아직 분석을 시작하지 않았습니다</h2>
-                  <Button onClick={() => setScreen('upload')}>합성 대화 선택하기</Button>
+                  <Button onClick={() => setScreen('upload')}>대화 선택하기</Button>
                 </>
               ) : (
                 <>
                   <h2>
                     {running
-                      ? '합성 대화 분석 중'
+                      ? '대화 분석 중'
                       : run.scenario === 'failure'
                         ? '분석 실패'
                         : run.scenario === 'partial'
@@ -279,8 +283,8 @@ export default function DemoApp() {
                             {successful.includes(id)
                               ? '분석 완료 · 피드백 1건'
                               : run.scenario === 'failure'
-                                ? '서버의 AI 분석 설정이 필요합니다. 관리자에게 문의해주세요. (MODEL_NOT_CONFIGURED · 시뮬레이션)'
-                                : '응답 시간이 초과됐습니다. (MODEL_TIMEOUT · 시뮬레이션)'}
+                                ? 'AI 분석을 시작하지 못했습니다. 관리자에게 문의해주세요.'
+                                : '분석 응답이 늦어 완료하지 못했습니다. 잠시 후 다시 시도해주세요.'}
                           </p>
                         </div>
                       ))}
@@ -289,11 +293,8 @@ export default function DemoApp() {
                           생성된 피드백 보기
                         </Button>
                       )}
-                      <Button onClick={() => setScreen('upload')}>다른 시나리오 시도</Button>
-                      <small>
-                        LLM을 호출하지 않는 시뮬레이션입니다. 분석 완료는 실제 업무 성공을 의미하지
-                        않습니다.
-                      </small>
+                      <Button onClick={() => setScreen('upload')}>다른 대화 분석하기</Button>
+                      <small>분석 결과는 개선을 위한 참고 자료입니다.</small>
                     </>
                   )}
                 </>
@@ -302,10 +303,7 @@ export default function DemoApp() {
           )}
           {screen === 'feedback' && (
             <>
-              <p>
-                시연 팀원 본인의 합성 대화만 표시합니다. 팀장 역할로 전환해도 같은 시연 계정의 개인
-                화면입니다.
-              </p>
+              <p>내가 선택한 대화의 개선점을 확인해보세요.</p>
               {!successful.length && (
                 <Card>
                   <p>생성된 피드백이 없습니다. 업로드에서 분석을 완료해주세요.</p>
@@ -334,8 +332,7 @@ export default function DemoApp() {
           {screen === 'team' && (
             <>
               <Notice>
-                별도로 준비한 과거 합성 집계입니다. 방금 실행한 분석 결과나 실제 팀의 성과가
-                아닙니다.
+                팀 성과는 미리 준비된 주간 샘플입니다. 방금 분석한 대화는 포함하지 않습니다.
               </Notice>
               <label className="demo-candidate">
                 <input
@@ -352,10 +349,7 @@ export default function DemoApp() {
                     ? '기여 인원 공개 기준 미충족'
                     : `기여자 ${teamSample.contributors}명 · 본인 확인 ${teamSample.confirmed}건 · 성공 ${teamSample.successes}건 · 오류 수정 재작업 ${teamSample.rework}건`}
                 </p>
-                <small>
-                  비율 지표는 본인 확인 건수를 분모로 합니다. 표본 20건·기여자 5명 미만인 경우
-                  수치를 공개하지 않는 합성 예시입니다.
-                </small>
+                <small>비율은 결과를 확인한 업무를 기준으로 계산합니다.</small>
               </Card>
               <div className="demo-metrics">
                 {[
@@ -373,9 +367,9 @@ export default function DemoApp() {
                 ))}
               </div>
               <Card>
-                <h2>성공 업무당 토큰 추이 · 합성 예시</h2>
+                <h2>성공 업무당 토큰 추이</h2>
                 {privacy ? (
-                  <p>기여 인원·공개 정책에 따라 수치를 숨깁니다.</p>
+                  <p>기여자가 5명 이상일 때 팀 지표를 볼 수 있습니다.</p>
                 ) : (
                   teamSample.weeks.map((week) => (
                     <div className="demo-trend" key={week.label}>
@@ -395,20 +389,18 @@ export default function DemoApp() {
           )}
           {screen === 'guides' && (
             <>
-              <Notice>
-                공유 승인을 마친 별도 합성 사례입니다. 개인 피드백을 자동으로 공개하지 않습니다.
-              </Notice>
+              <Notice>팀원이 공유한 사례 중 팀장이 고른 가이드입니다.</Notice>
               {role === 'leader' && (
                 <Card>
-                  <h2>팀장 · 공유 사례 관리</h2>
-                  <p>합성 공유 사례: 고객과 제안 조건을 먼저 정리하기</p>
+                  <h2>공유 사례 관리</h2>
+                  <p>고객과 제안 조건을 먼저 정리하기</p>
                   <Button
                     onClick={() => {
                       setGuide(!guide)
                       setGuideMessage(
                         guide
-                          ? '합성 사례를 가이드에서 뺐습니다. 팀원 화면에서도 숨겨집니다.'
-                          : '합성 사례를 가이드에 추가했습니다. 팀원도 읽을 수 있습니다.',
+                          ? '가이드에서 뺐습니다. 팀원에게도 표시되지 않습니다.'
+                          : '가이드에 추가했습니다. 팀원도 읽을 수 있습니다.',
                       )
                     }}
                   >
@@ -416,7 +408,7 @@ export default function DemoApp() {
                   </Button>
                 </Card>
               )}
-              {guideMessage && <Notice>{guideMessage} 데모 메모리에만 반영됩니다.</Notice>}
+              {guideMessage && <Notice>{guideMessage}</Notice>}
               {guide ? (
                 <Card>
                   <h2>고객과 제안 조건을 먼저 정리하기</h2>
@@ -425,7 +417,6 @@ export default function DemoApp() {
                     줄이는 데 도움이 됩니다.
                   </p>
                   <blockquote>{cases[0].after}</blockquote>
-                  <small>비식별 합성 사례 · 작성자·개인 원문 없음</small>
                 </Card>
               ) : (
                 <Card>
@@ -433,7 +424,7 @@ export default function DemoApp() {
                   <p>
                     {role === 'leader'
                       ? '위 공유 사례의 ‘가이드에 추가’ 버튼으로 다시 지정할 수 있습니다.'
-                      : '팀장이 사례를 지정하면 이곳에서 읽을 수 있습니다. 상단 시연 역할을 팀장으로 바꾸면 지정 과정을 체험할 수 있습니다.'}
+                      : '팀장이 가이드를 추가하면 이곳에서 읽을 수 있습니다.'}
                   </p>
                 </Card>
               )}
@@ -442,13 +433,12 @@ export default function DemoApp() {
         </main>
       </div>
       {current && (
-        <Modal title={`${current.type} · 합성 피드백`} onClose={() => setDetail(null)}>
+        <Modal title={`${current.type} · 피드백`} onClose={() => setDetail(null)}>
           <p>{current.problem}</p>
           <h3>개선 전</h3>
           <blockquote>{current.before}</blockquote>
           <h3>개선 프롬프트</h3>
           <blockquote>{current.after}</blockquote>
-          <small>합성 권고이며 실제 절감량이나 업무 성과를 보장하지 않습니다.</small>
           <div className="demo-actions">
             {['도움됨', '해당 없음'].map((reaction) => (
               <Button
@@ -469,7 +459,7 @@ export default function DemoApp() {
             </Button>
           </div>
           {original && (
-            <section aria-label="합성 근거 대화">
+            <section aria-label="근거 대화">
               {current.messages.map((message, index) => (
                 <p className={index === current.evidence ? 'demo-evidence' : ''} key={index}>
                   {index % 2 === 0 ? '사용자' : 'AI'}: {message}
@@ -480,8 +470,8 @@ export default function DemoApp() {
           )}
           <p role="status">
             {reactions[current.id]
-              ? `${reactions[current.id]} 반응이 데모 메모리에 반영됐습니다.`
-              : '반응을 선택할 수 있습니다.'}
+              ? `${reactions[current.id]}으로 표시했습니다.`
+              : '이 피드백이 도움이 됐나요?'}
           </p>
         </Modal>
       )}

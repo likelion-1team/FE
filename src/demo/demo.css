@@ -20,6 +20,18 @@
   gap: 12px;
   flex-wrap: wrap;
 }
+.demo-options {
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+}
+.demo-options summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 14px;
+}
+.demo-options[open] > :not(summary) {
+  margin-top: 14px;
+}
 .demo-banner {
   background: #fff4cd;
   color: #59430c;

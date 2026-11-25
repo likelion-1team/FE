@@ -138,21 +138,19 @@ it('replaces every team goal so an omitted target is cleared', async () => {
 it('approves a share only after a one-time preview', async () => {
   vi.mocked(fetch)
     .mockResolvedValueOnce(
-      json(
-        {
-          previewId: 901,
-          previewVersion: 3,
-          expiresAt: '2026-11-24T10:50:00+09:00',
-          redactionStatus: 'REDACTED',
-          content: {
-            title: '맥락',
-            type: 'MISSING_CONTEXT',
-            problem: '배경이 빠짐',
-            improvement: '대상을 적기',
-            example: { before: '써줘', after: '영업팀 주간 보고를 써줘' },
-          },
+      json({
+        previewId: 901,
+        previewVersion: 3,
+        expiresAt: '2026-11-24T10:50:00+09:00',
+        redactionStatus: 'PASSED',
+        content: {
+          title: '맥락',
+          type: 'MISSING_CONTEXT',
+          problem: '배경이 빠짐',
+          improvement: '대상을 적기',
+          example: { before: '써줘', after: '영업팀 주간 보고를 써줘' },
         },
-      ),
+      }),
     )
     .mockResolvedValueOnce(json({ shared: true, shareVersion: 1, sharedCaseId: 77 }))
   await expect(api.sharePreview(12)).resolves.toMatchObject({ previewId: 901, previewVersion: 3 })
