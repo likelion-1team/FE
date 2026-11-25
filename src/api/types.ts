@@ -222,6 +222,15 @@ export interface FeedbackItem {
 export interface FeedbackList {
   days: { date: string; feedbacks: FeedbackItem[] }[]
 }
+export interface TeamSubmissions {
+  settingsVersion: number | null
+  submittedMembers: number
+  totalMembers: number
+  analyzedConversations: number | null
+  targetCount: number | null
+  coverageRatio: number | null
+  status: 'AVAILABLE' | 'SUPPRESSED'
+}
 export interface TeamGoals {
   version: number
   successRateMin: number | null

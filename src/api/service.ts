@@ -24,6 +24,7 @@ import type {
   SharedCase,
   Team,
   TeamGoals,
+  TeamSubmissions,
   Tokens,
   Trends,
   Upload,
@@ -435,6 +436,11 @@ export const api = {
     request(`/teams/${teamId}/guides/${id}`, {
       method: enabled ? 'PUT' : 'DELETE',
       ...(enabled ? { json: { expectedShareVersion: shareVersion } } : {}),
+    }),
+  submissions: (teamId: string, signal?: AbortSignal) =>
+    request<TeamSubmissions>(`/teams/${teamId}/submissions`, {
+      signal,
+      validate: live.submissions.parse,
     }),
   goals: (teamId: string, signal?: AbortSignal) =>
     request<TeamGoals>(`/teams/${teamId}/goals`, { signal, validate: live.goals.parse }),

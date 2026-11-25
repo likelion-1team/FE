@@ -132,6 +132,40 @@ function goalRatio(value: number | null) {
 function goalTokens(value: number | null) {
   return value == null ? '미설정' : new Intl.NumberFormat('ko-KR').format(value)
 }
+function SubmissionsPanel({ teamId }: { teamId: string }) {
+  const submissions = useQuery({
+    queryKey: ['team', teamId, 'submissions'],
+    queryFn: ({ signal }) => api.submissions(teamId, signal),
+  })
+  return (
+    <Card>
+      <h2>팀 제출 현황</h2>
+      {submissions.isPending ? (
+        <Loading />
+      ) : submissions.isError ? (
+        <ErrorState error={submissions.error} retry={() => void submissions.refetch()} />
+      ) : (
+        <>
+          <p>
+            제출 인원 {submissions.data.submittedMembers}/{submissions.data.totalMembers}
+          </p>
+          {submissions.data.status === 'SUPPRESSED' ? (
+            <p>기여 인원·공개 정책에 따라 대화 수와 커버리지는 비공개입니다.</p>
+          ) : (
+            <>
+              <p>분석 기준 버전 {submissions.data.settingsVersion ?? '미설정'}</p>
+              <p>
+                분석된 대화 {goalTokens(submissions.data.analyzedConversations)} / 목표{' '}
+                {goalTokens(submissions.data.targetCount)}
+              </p>
+              <p>커버리지 {goalRatio(submissions.data.coverageRatio)}</p>
+            </>
+          )}
+        </>
+      )}
+    </Card>
+  )
+}
 function GoalsPanel({ teamId, canEdit }: { teamId: string; canEdit: boolean }) {
   const client = useQueryClient()
   const goals = useQuery({
@@ -289,6 +323,7 @@ function DashboardContent({ scope }: { scope: 'ME' | 'TEAM' }) {
             : '팀 성과는 집계로 확인합니다. 개인 원문과 피드백은 본인만 봅니다.'
         }
       />
+      {scope === 'TEAM' && leader && <SubmissionsPanel teamId={teamId} />}
       {scope === 'TEAM' && !leader && (
         <Notice>
           팀 집계 공개 범위는 서버 권한에 따릅니다. 조회가 제한되면 팀장에게 문의해주세요.

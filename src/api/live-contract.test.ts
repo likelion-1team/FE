@@ -87,6 +87,26 @@ it('records a confirmed outcome against the current confirmation version', async
     note: '보고서에 사용',
   })
 })
+it('keeps suppressed submission counts null instead of turning them into zero', async () => {
+  vi.mocked(fetch).mockResolvedValue(
+    json({
+      settingsVersion: null,
+      submittedMembers: 4,
+      totalMembers: 6,
+      analyzedConversations: null,
+      targetCount: null,
+      coverageRatio: null,
+      status: 'SUPPRESSED',
+    }),
+  )
+  await expect(api.submissions('4')).resolves.toMatchObject({
+    status: 'SUPPRESSED',
+    submittedMembers: 4,
+    analyzedConversations: null,
+    coverageRatio: null,
+  })
+  expect(String(vi.mocked(fetch).mock.calls[0][0])).toContain('/teams/4/submissions')
+})
 it('replaces every team goal so an omitted target is cleared', async () => {
   vi.mocked(fetch).mockResolvedValue(
     json({

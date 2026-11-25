@@ -147,6 +147,15 @@ export const share = z.object({
   shareVersion: count,
   sharedCaseId: id.nullable(),
 })
+export const submissions = z.object({
+  settingsVersion: count.nullable(),
+  submittedMembers: count,
+  totalMembers: count,
+  analyzedConversations: count.nullable(),
+  targetCount: count.nullable(),
+  coverageRatio: z.number().nullable(),
+  status: z.enum(['AVAILABLE', 'SUPPRESSED']),
+})
 export const goals = z.object({
   version: count,
   successRateMin: z.number().nullable(),
