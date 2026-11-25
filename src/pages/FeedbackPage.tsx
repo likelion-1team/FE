@@ -46,6 +46,8 @@ export const feedbackTypes = [
   { value: 'LONG_CONVERSATION', label: '긴 대화' },
   { value: 'OVERSPEC_MODEL', label: '과한 모델' },
 ]
+export const feedbackTypeLabel = (type: string) =>
+  feedbackTypes.find((entry) => entry.value === type)?.label || '개선 제안'
 
 export function FeedbackPage() {
   const { teamId, base } = useWorkspace()
@@ -119,12 +121,15 @@ export function FeedbackPage() {
       ) : !items.length ? (
         <Empty title="조건에 맞는 피드백이 없습니다">
           분석을 완료했는지 확인하거나 기간과 유형을 변경해주세요.
+          <Link className="button primary" to={`${base}/upload`}>
+            새 대화 올리기
+          </Link>
         </Empty>
       ) : (
         items.map((item) => (
           <Card key={item.feedbackId}>
             <small>
-              {formatDate(item.date)} · {item.type}
+              {formatDate(item.date)} · {feedbackTypeLabel(item.type)}
             </small>
             <h2>{item.title}</h2>
             <p className="success">발생 {item.occurrenceCount}회 · 절감량 미측정</p>
@@ -280,7 +285,7 @@ function FeedbackDetailContent() {
   })
   const outcomeAssessment = savedOutcome ?? query.data?.outcomeAssessment ?? null
   const reworkAssessment = savedRework ?? query.data?.reworkAssessment ?? null
-  const selectedRework = reworkType ?? reworkAssessment?.type ?? 'ERROR_CORRECTION'
+  const selectedRework = reworkType ?? reworkAssessment?.type ?? 'UNKNOWN'
   const saveOutcome = useMutation({
     mutationFn: (outcome: 'SUCCESS' | 'FAILURE' | 'UNKNOWN') => {
       if (query.data?.itemId == null) throw new Error('확인할 분석 항목이 없습니다.')
@@ -296,8 +301,8 @@ function FeedbackDetailContent() {
       setOutcomeNote('')
       setOutcomeMessage(
         saved.outcome === 'UNKNOWN'
-          ? '결과를 모름으로 저장했습니다. 성공률 분모에는 넣지 않습니다.'
-          : '업무 결과를 저장했습니다. 성공률은 이 확인값으로 계산됩니다.',
+          ? '모름으로 저장했습니다. 성과 계산에는 포함하지 않습니다.'
+          : '업무 결과를 저장했습니다.',
       )
       await client.invalidateQueries({ queryKey: ['team', teamId, 'feedback', feedbackId] })
     },
@@ -318,10 +323,10 @@ function FeedbackDetailContent() {
       setReworkNote('')
       setReworkMessage(
         saved.type === 'UNKNOWN'
-          ? '재작업 이유를 모름으로 저장했습니다. 오류 재작업률에서는 제외됩니다.'
+          ? '재작업 이유를 모름으로 저장했습니다.'
           : saved.type === 'ERROR_CORRECTION'
-            ? '오류 수정으로 저장했습니다. 오류 재작업률의 분자에 포함됩니다.'
-            : '재작업 이유를 저장했습니다. 분모에만 포함됩니다.',
+            ? '오류 수정으로 저장했습니다.'
+            : '재작업 이유를 저장했습니다.',
       )
       await client.invalidateQueries({ queryKey: ['team', teamId, 'feedback', feedbackId] })
     },
@@ -393,7 +398,7 @@ function FeedbackDetailContent() {
         <Link className="button secondary" to={`${base}/feedbacks`}>
           목록으로
         </Link>
-        <span className="muted">{data.type}</span>
+        <span className="muted">{feedbackTypeLabel(data.type)}</span>
         {data.evidences.map((e, i) => (
           <Button
             key={`${e.conversationVersionId}-${i}`}
@@ -434,10 +439,7 @@ function FeedbackDetailContent() {
           <p>검증된 절감 근거가 없습니다.</p>
           {!sharedNow && (
             <>
-              <p>
-                새 공유는 가려진 미리보기를 확인한 뒤에만 승인됩니다. 미리보기는 30분 동안, 한 번만
-                쓸 수 있습니다.
-              </p>
+              <p>팀에 공개할 내용을 미리 확인해주세요. 개인 원문은 공유하지 않습니다.</p>
               <Button disabled={previewShare.isPending} onClick={() => previewShare.mutate()}>
                 {previewShare.isPending ? '미리보기 만드는 중…' : '공유 미리보기'}
               </Button>
@@ -505,24 +507,19 @@ function FeedbackDetailContent() {
         )}
         <ErrorMessage error={reaction.error} />
       </Card>
-      <div className="notice">
+      <Card>
         <h2>업무가 실제로 성공했는지 확인해주세요</h2>
-        <p>
-          성공률은 여기서 확인한 성공·실패만 분모로 씁니다. 모름은 저장되지만 분모에서 빠집니다.
-        </p>
+        <p>실제로 사용한 결과를 선택해주세요. ‘모름’은 성과 계산에서 제외됩니다.</p>
         {data.aiAssessment?.outcome && (
           <p className="muted">
             AI 추정은{' '}
             {outcomeLabels[data.aiAssessment.outcome as keyof typeof outcomeLabels] ??
               data.aiAssessment.outcome}
-            입니다. 아래 저장값과는 따로 둡니다.
+            입니다. 실제 업무 결과를 기준으로 선택해주세요.
           </p>
         )}
         {outcomeAssessment ? (
-          <p>
-            저장된 본인 확인 {outcomeLabels[outcomeAssessment.outcome]} · 버전{' '}
-            {outcomeAssessment.version}
-          </p>
+          <p>내가 확인한 결과: {outcomeLabels[outcomeAssessment.outcome]}</p>
         ) : (
           <p>아직 본인 확인이 없습니다.</p>
         )}
@@ -548,6 +545,7 @@ function FeedbackDetailContent() {
               ).map(([value, label]) => (
                 <Button
                   key={value}
+                  aria-pressed={outcomeAssessment?.outcome === value}
                   disabled={saveOutcome.isPending}
                   onClick={() => saveOutcome.mutate(value)}
                 >
@@ -560,20 +558,14 @@ function FeedbackDetailContent() {
           </>
         )}
         <h2>다시 요청한 이유를 골라주세요</h2>
-        <p>
-          오류 재작업률의 분자는 오류 수정만 셉니다. 오류 수정이 있었다면 그 이유를 우선 골라주세요.
-        </p>
+        <p>오류를 고치려고 다시 요청했는지, 조건이나 표현을 바꾸려고 했는지 알려주세요.</p>
         {data.aiAssessment?.reworkType && (
           <p className="muted">
-            AI 추정 이유는 {reworkLabel(data.aiAssessment.reworkType)}입니다. 저장값과는 따로
-            둡니다.
+            대화에서 추정한 이유는 {reworkLabel(data.aiAssessment.reworkType)}입니다.
           </p>
         )}
         {reworkAssessment ? (
-          <p>
-            저장된 재작업 이유 {reworkLabel(reworkAssessment.type)} · 버전{' '}
-            {reworkAssessment.version}
-          </p>
+          <p>내가 확인한 이유: {reworkLabel(reworkAssessment.type)}</p>
         ) : (
           <p>아직 재작업 이유를 확인하지 않았습니다.</p>
         )}
@@ -608,8 +600,19 @@ function FeedbackDetailContent() {
             <ErrorMessage error={saveRework.error} />
           </>
         )}
-        <p>실제 사용 여부와 대화 삭제는 준비 중입니다.</p>
-      </div>
+      </Card>
+      <Card>
+        <h2>다음 업무에도 적용해보세요</h2>
+        <p>가이드를 참고해 새 대화를 작성하고, 결과가 어떻게 달라졌는지 확인할 수 있습니다.</p>
+        <div className="row">
+          <Link className="button primary" to={`${base}/guides`}>
+            가이드 참고하기
+          </Link>
+          <Link className="button secondary" to={`${base}/dashboard`}>
+            나의 성과 확인
+          </Link>
+        </div>
+      </Card>
       {original !== null && (
         <OriginalConversation
           id={original}
@@ -626,7 +629,7 @@ function FeedbackDetailContent() {
         >
           <p>개인정보가 가려진 내용입니다. 이 내용으로 승인하면 팀에 공유됩니다.</p>
           <h3>{preview.content.title}</h3>
-          <p>{preview.content.type}</p>
+          <p>{feedbackTypeLabel(preview.content.type)}</p>
           <h3>문제</h3>
           <p className="pre-wrap">{preview.content.problem}</p>
           <h3>개선</h3>
@@ -635,7 +638,13 @@ function FeedbackDetailContent() {
           <p className="pre-wrap">{preview.content.example.before}</p>
           <h3>개선 후</h3>
           <p className="pre-wrap">{preview.content.example.after}</p>
-          <p className="muted">만료 {preview.expiresAt}</p>
+          <p className="muted">
+            확인 가능 시간:{' '}
+            {new Intl.DateTimeFormat('ko-KR', { dateStyle: 'short', timeStyle: 'short' }).format(
+              new Date(preview.expiresAt),
+            )}
+            까지
+          </p>
           {previewExpired && (
             <Notice tone="error">
               미리보기가 만료됐습니다. 닫은 뒤 새 미리보기를 만들어주세요.

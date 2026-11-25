@@ -60,7 +60,7 @@ export function TeamsPage() {
                 <h2>{team.name}</h2>
                 {team.description && <p>{team.description}</p>}
                 <p>
-                  내 역할: {team.myRole === 'LEADER' ? '팀장 LEADER' : '팀원 MEMBER'}
+                  내 역할: {team.myRole === 'LEADER' ? '팀장' : '팀원'}
                   {team.memberCount != null && ` · ${team.memberCount}명`}
                 </p>
                 <Button

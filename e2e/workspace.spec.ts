@@ -36,7 +36,7 @@ test('team switch changes role, clears private UI and exposes manager controls',
   await login(page)
   await page.getByRole('button', { name: /콘텐츠 운영팀 · 팀 전환/ }).click()
   await page.getByRole('button', { name: '이 팀 선택 · 팀장' }).click()
-  await expect(page.getByText('팀장 LEADER', { exact: true })).toBeVisible()
+  await expect(page.getByText('팀장', { exact: true })).toBeVisible()
   await page.getByRole('link', { name: '팀 설정', exact: true }).click()
   await page.getByRole('button', { name: '이메일로 팀원 추가' }).click()
   await page.getByLabel('가입된 이메일').fill('new@example.com')
@@ -110,7 +110,7 @@ test('feedback reaction cancellation, escaped originals, share revocation and pe
   await expect(page.getByText('공유를 철회했습니다.')).toBeVisible()
   await expect(page.getByRole('button', { name: '성공', exact: true })).toBeEnabled()
   await expect(page.getByRole('button', { name: '재작업 이유 저장', exact: true })).toBeEnabled()
-  await expect(page.getByText('실제 사용 여부와 대화 삭제는 준비 중입니다.')).toBeVisible()
+  await expect(page.getByRole('heading', { name: '다음 업무에도 적용해보세요' })).toBeVisible()
   await expect(page.getByRole('button', { name: '대화 삭제', exact: true })).toHaveCount(0)
   expect(calls.some((c) => c.method === 'DELETE' && c.path.endsWith('/reaction'))).toBe(true)
   expect(calls.some((c) => c.path.endsWith('/share') && JSON.parse(c.body!).shared === false)).toBe(
@@ -160,7 +160,7 @@ test('cookie sessions restore and incorrect role URLs redirect to the real team 
   await mockApi(page, { cookieSession: true })
   await page.goto('/teams/1/leader/settings')
   await expect(page).toHaveURL(/\/teams\/1\/member\/dashboard/)
-  await expect(page.getByText('팀원 MEMBER', { exact: true })).toBeVisible()
+  await expect(page.getByText('팀원', { exact: true })).toBeVisible()
   expect(
     await page.evaluate(() => ({ local: localStorage.length, session: sessionStorage.length })),
   ).toEqual({ local: 0, session: 0 })

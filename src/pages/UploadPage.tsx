@@ -32,6 +32,12 @@ const labels: Record<string, string> = {
   SUCCEEDED: '분석 완료',
   PARTIALLY_SUCCEEDED: '일부 분석 완료',
 }
+function unavailableConversation(code: string | null, duplicateType: string) {
+  if (code === 'ALREADY_ANALYZED' || duplicateType === 'SAME_CONTENT')
+    return '이미 분석한 대화입니다.'
+  if (code === 'UNSUPPORTED_STRUCTURE') return '대화 본문을 읽을 수 없습니다.'
+  return '분석할 수 없는 대화입니다. 다른 대화를 선택해주세요.'
+}
 
 export function UploadPage() {
   const isActive = useActiveScreen()
@@ -208,7 +214,7 @@ export function UploadPage() {
                   }}
                 />
               </Field>
-              <p role="status">{selected.length}건 선택 · 기본은 모두 선택 해제</p>
+              <p role="status">{selected.length}건 선택 · 분석할 대화를 골라주세요.</p>
               {candidatesQuery.isPending ? (
                 <Loading />
               ) : candidatesQuery.isError ? (
@@ -237,7 +243,7 @@ export function UploadPage() {
                       <span>
                         {formatDate(c.startedAt)} ·{' '}
                         {!c.selectable
-                          ? `선택 불가 · ${c.validationCode || c.duplicateType}`
+                          ? unavailableConversation(c.validationCode, c.duplicateType)
                           : c.duplicateType === 'CONTENT_UPDATED'
                             ? '변경된 내용 · 선택 가능'
                             : '선택 가능'}
@@ -339,7 +345,7 @@ const terminal = (status?: string) =>
 function analysisFailureMessage(code: string) {
   switch (code) {
     case 'MODEL_NOT_CONFIGURED':
-      return '서버의 AI 분석 설정이 완료되지 않아 분석하지 못했습니다. 파일을 다시 올리기 전에 서비스 관리자에게 문의해주세요.'
+      return '지금은 AI 분석을 이용할 수 없습니다. 파일을 다시 올리기 전에 관리자에게 문의해주세요.'
     case 'MODEL_TIMEOUT':
       return 'AI 분석 응답 시간이 초과됐습니다. 잠시 후에도 같은 문제가 발생하면 서비스 관리자에게 문의해주세요.'
     default:
@@ -369,12 +375,12 @@ function AnalysisProgress({ id }: { id: string }) {
     <Card>
       <h2>{labels[data.status]}</h2>
       <p>
-        분석 {String(id)} ·{' '}
+        {' '}
         {data.stage === 'ASSESSING'
           ? '대화 평가 중'
           : data.stage === 'GENERATING_FEEDBACK'
             ? '피드백 생성 중'
-            : '상태 확인'}{' '}
+            : '대화 처리 현황'}{' '}
         · {data.completedCount}/{data.selectedCount}건 처리
       </p>
       <progress max="100" value={data.progressPercent} aria-label="분석 진행률" />
@@ -413,7 +419,12 @@ function AnalysisProgress({ id }: { id: string }) {
                       {item.failureCode && (
                         <div>
                           <p>{analysisFailureMessage(item.failureCode)}</p>
-                          <small>오류 코드: {item.failureCode}</small>
+                          <details>
+                            <summary>문의용 오류 정보</summary>
+                            <small>
+                              분석 {String(id)} · 오류 코드: {item.failureCode}
+                            </small>
+                          </details>
                         </div>
                       )}
                       {item.feedbackIds.map((feedbackId) => (

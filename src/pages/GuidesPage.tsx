@@ -19,7 +19,7 @@ import {
   Notice,
   PageTitle,
 } from '../components/ui'
-import { feedbackTypes } from './FeedbackPage'
+import { feedbackTypes, feedbackTypeLabel } from './FeedbackPage'
 
 function Examples({ example }: { example: Example }) {
   return (
@@ -78,7 +78,10 @@ export function GuidesPage() {
   })
   return (
     <>
-      <PageTitle title="팀 개선 가이드" />
+      <PageTitle
+        title="팀 개선 가이드"
+        description="팀이 함께 읽고 다음 업무에 활용하는 가이드입니다."
+      />
       <Notice>
         팀장이 지정한 공유 사례를 다음 업무에 활용하세요. 개인 원문은 포함되지 않습니다.
       </Notice>
@@ -102,7 +105,7 @@ export function GuidesPage() {
       ) : (
         query.data.groups.map((g) => (
           <section className="stack" key={g.type}>
-            <span className="type-label">{g.type}</span>
+            <span className="type-label">{feedbackTypeLabel(g.type)}</span>
             {g.guides.map((guide) => (
               <Card key={guide.feedbackId}>
                 <h2>{guide.title}</h2>
@@ -125,9 +128,13 @@ export function GuidesPage() {
           </section>
         ))
       )}
-      <Link className="button primary" to={`${base}/upload`}>
-        내 대화 업로드
-      </Link>
+      <Card>
+        <h2>가이드를 적용한 대화도 확인해보세요</h2>
+        <p>다음 업무에서 가이드를 활용한 뒤 대화를 다시 올리면 새 피드백을 받을 수 있습니다.</p>
+        <Link className="button primary" to={`${base}/upload`}>
+          내 대화 업로드
+        </Link>
+      </Card>
     </>
   )
 }
@@ -224,7 +231,7 @@ export function SharedCasesPage() {
               </Button>
             </div>
             <small>
-              {item.taskType} · {item.type}
+              {item.taskType} · {feedbackTypeLabel(item.type)}
             </small>
             <p>관찰 · {item.problem}</p>
             <p>개선 방안 · {item.improvement}</p>

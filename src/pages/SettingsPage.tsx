@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError } from '../api/client'
 import { api } from '../api/service'
@@ -182,7 +183,7 @@ function EditSettings({ settings, onClose }: { settings: Settings; onClose: () =
 }
 
 export function SettingsPage() {
-  const { teamId, leader, team } = useWorkspace(),
+  const { teamId, leader, team, base } = useWorkspace(),
     client = useQueryClient()
   const settings = useQuery({
     queryKey: ['team', teamId, 'settings'],
@@ -228,7 +229,7 @@ export function SettingsPage() {
               <h2>분석할 업무와 기간</h2>
               {settings.data.taskType ? (
                 <>
-                  <Field label="허용 업무 유형 · MVP 1개">
+                  <Field label="분석할 업무">
                     <input readOnly value={settings.data.taskType.name} />
                   </Field>
                   {(
@@ -265,14 +266,14 @@ export function SettingsPage() {
               )}
             </Card>
             <Card>
-              <h2>평가 기준 · 조회 전용</h2>
-              <p>현재 서버에 저장된 성공·실패·판정 불가 조건으로 분석합니다.</p>
+              <h2>분석 안내</h2>
+              <p>팀에서 정한 성공·실패·판정 불가 조건으로 대화를 분석합니다.</p>
               <p>측정되지 않은 지표는 미측정으로 표시합니다.</p>
-              <p>
-                기준 버전 {settings.data.version} · 한 번에 최대{' '}
-                {settings.data.policies.maxSelectionsPerRequest}건 선택
-              </p>
+              <p>한 번에 최대 {settings.data.policies.maxSelectionsPerRequest}건 선택</p>
               <p>업로드 선택 가능 시간 {settings.data.policies.uploadRetentionMinutes}분</p>
+              <Link className="button primary" to={`${base}/upload`}>
+                대화 업로드로 이동
+              </Link>
             </Card>
           </div>
           {edit && canEdit && (
