@@ -10,7 +10,6 @@ import {
   Empty,
   ErrorMessage,
   ErrorState,
-  FeaturePending,
   Field,
   formatDate,
   Loading,
@@ -274,9 +273,7 @@ export function SettingsPage() {
                 {settings.data.policies.maxSelectionsPerRequest}건 선택
               </p>
               <p>업로드 선택 가능 시간 {settings.data.policies.uploadRetentionMinutes}분</p>
-              <FeaturePending title="실제 업무 결과 확인 화면">
-                서버 API가 추가됐으며 화면 연결은 후속 작업입니다.
-              </FeaturePending>
+              <p>업무 결과와 재작업 이유는 피드백 상세에서 확인합니다.</p>
             </Card>
           </div>
           {edit && canEdit && (
