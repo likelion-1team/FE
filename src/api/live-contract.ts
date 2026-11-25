@@ -147,6 +147,19 @@ export const share = z.object({
   shareVersion: count,
   sharedCaseId: id.nullable(),
 })
+export const sharePreview = z.object({
+  previewId: id,
+  previewVersion: count,
+  expiresAt: z.string(),
+  redactionStatus: z.string(),
+  content: z.object({
+    title: z.string(),
+    type: z.string(),
+    problem: z.string(),
+    improvement: z.string(),
+    example: z.object({ before: z.string(), after: z.string() }),
+  }),
+})
 export const outcome = z.object({
   itemId: id,
   version: count,

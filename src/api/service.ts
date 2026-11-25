@@ -19,6 +19,7 @@ import type {
   Member,
   Reaction,
   Settings,
+  SharePreview,
   SettingsInput,
   SharedCase,
   Team,
@@ -316,6 +317,28 @@ export const api = {
       reaction
         ? { method: 'PUT', json: { reaction, ...(reason ? { reason } : {}) } }
         : { method: 'DELETE' },
+    ),
+  sharePreview: (id: Id) =>
+    request<SharePreview>(`/feedbacks/${id}/share-preview`, {
+      method: 'POST',
+      json: {},
+      validate: live.sharePreview.parse,
+    }),
+  approveShare: (
+    id: Id,
+    body: { expectedShareVersion: number; previewId: Id; previewVersion: number },
+  ) =>
+    request<{ isShared: boolean; shareVersion: number; sharedCaseId: Id | null }>(
+      `/feedbacks/${id}/share`,
+      {
+        method: 'PATCH',
+        json: { shared: true, ...body },
+        validate: (value) => {
+          const raw = release(value, 'shared', live.share, schemas.shareSchema)
+          if (!('shared' in raw)) return { isShared: raw.isShared, shareVersion: 0, sharedCaseId: null }
+          return { isShared: raw.shared, shareVersion: raw.shareVersion, sharedCaseId: raw.sharedCaseId }
+        },
+      },
     ),
   revokeShare: (id: Id, expectedShareVersion?: number) =>
     request<{ isShared: boolean }>(`/feedbacks/${id}/share`, {

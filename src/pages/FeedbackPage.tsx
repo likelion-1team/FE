@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api/service'
-import type { FeedbackItem, FeedbackList, Id, Reaction } from '../api/types'
+import type { FeedbackItem, FeedbackList, Id, Reaction, SharePreview } from '../api/types'
 import { useWorkspace } from '../components/Workspace'
 import {
   Button,
@@ -10,7 +10,6 @@ import {
   Empty,
   ErrorMessage,
   ErrorState,
-  FeaturePending,
   Field,
   formatDate,
   Loading,
@@ -222,7 +221,9 @@ function FeedbackDetailContent() {
     [reworkVersion, setReworkVersion] = useState(0),
     [reworkType, setReworkType] = useState<(typeof reworkOptions)[number][0]>('ERROR_CORRECTION'),
     [reworkNote, setReworkNote] = useState(''),
-    [reworkMessage, setReworkMessage] = useState('')
+    [reworkMessage, setReworkMessage] = useState(''),
+    [preview, setPreview] = useState<SharePreview | null>(null),
+    [shareMessage, setShareMessage] = useState('')
   const currentReaction =
     reactionOverride === undefined
       ? query.data && 'reaction' in query.data
@@ -290,6 +291,31 @@ function FeedbackDetailContent() {
             ? '오류 수정으로 저장했습니다. 오류 재작업률의 분자에 포함됩니다.'
             : '재작업 이유를 저장했습니다. 분모에만 포함됩니다.',
       )
+    },
+  })
+  const previewShare = useMutation({
+    mutationFn: () => api.sharePreview(feedbackId),
+    onSuccess: (value) => {
+      setPreview(value)
+      setShareMessage('')
+    },
+  })
+  const approveShare = useMutation({
+    mutationFn: () => {
+      if (!preview) throw new Error('공유 미리보기가 없습니다.')
+      return api.approveShare(feedbackId, {
+        expectedShareVersion: query.data?.sharing?.version ?? 0,
+        previewId: preview.previewId,
+        previewVersion: preview.previewVersion,
+      })
+    },
+    onSuccess: async () => {
+      setPreview(null)
+      setShareMessage('공유를 승인했습니다.')
+      patchList({ isShared: true })
+      await client.invalidateQueries({ queryKey: ['team', teamId, 'feedback', feedbackId] })
+      await client.invalidateQueries({ queryKey: ['team', teamId, 'guides'] })
+      await client.invalidateQueries({ queryKey: ['team', teamId, 'shared'] })
     },
   })
   const share = useMutation({
@@ -361,9 +387,20 @@ function FeedbackDetailContent() {
           <h3>예상 절감량</h3>
           <strong className="success">미측정</strong>
           <p>검증된 절감 근거가 없습니다.</p>
-          <FeaturePending title="공유본 미리보기">
-            공유본을 확인하고 승인하는 기능은 준비 중입니다. 새 공유 승인은 아직 지원하지 않습니다.
-          </FeaturePending>
+          {!revoked &&
+            !(data.sharing ? data.sharing.status === 'SHARED' : item?.isShared === true) && (
+              <>
+                <p>
+                  새 공유는 가려진 미리보기를 확인한 뒤에만 승인됩니다. 미리보기는 30분 동안, 한 번만
+                  쓸 수 있습니다.
+                </p>
+                <Button disabled={previewShare.isPending} onClick={() => previewShare.mutate()}>
+                  {previewShare.isPending ? '미리보기 만드는 중…' : '공유 미리보기'}
+                </Button>
+                <ErrorMessage error={previewShare.error} />
+                {shareMessage && <Notice>{shareMessage}</Notice>}
+              </>
+            )}
           {!revoked &&
             (data.sharing ? data.sharing.status === 'SHARED' : item?.isShared === true) && (
               <Button
@@ -500,6 +537,31 @@ function FeedbackDetailContent() {
           feedbackId={feedbackId}
           onClose={() => setOriginal(null)}
         />
+      )}
+      {preview && (
+        <Modal
+          title="공유 미리보기"
+          onClose={() => {
+            if (!approveShare.isPending) setPreview(null)
+          }}
+        >
+          <p>개인정보가 가려진 내용입니다. 이 내용으로 승인하면 팀에 공유됩니다.</p>
+          <h3>{preview.content.title}</h3>
+          <p>{preview.content.type}</p>
+          <h3>문제</h3>
+          <p className="pre-wrap">{preview.content.problem}</p>
+          <h3>개선</h3>
+          <p className="pre-wrap">{preview.content.improvement}</p>
+          <h3>개선 전</h3>
+          <p className="pre-wrap">{preview.content.example.before}</p>
+          <h3>개선 후</h3>
+          <p className="pre-wrap">{preview.content.example.after}</p>
+          <p className="muted">만료 {preview.expiresAt}</p>
+          <ErrorMessage error={approveShare.error} />
+          <Button disabled={approveShare.isPending} onClick={() => approveShare.mutate()}>
+            {approveShare.isPending ? '승인 중…' : '이 내용으로 공유'}
+          </Button>
+        </Modal>
       )}
       {revoke && (
         <Modal

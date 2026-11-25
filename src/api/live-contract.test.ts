@@ -87,6 +87,44 @@ it('records a confirmed outcome against the current confirmation version', async
     note: '보고서에 사용',
   })
 })
+it('approves a share only after a one-time preview', async () => {
+  vi.mocked(fetch)
+    .mockResolvedValueOnce(
+      json(
+        {
+          previewId: 901,
+          previewVersion: 3,
+          expiresAt: '2026-11-24T10:50:00+09:00',
+          redactionStatus: 'REDACTED',
+          content: {
+            title: '맥락',
+            type: 'MISSING_CONTEXT',
+            problem: '배경이 빠짐',
+            improvement: '대상을 적기',
+            example: { before: '써줘', after: '영업팀 주간 보고를 써줘' },
+          },
+        },
+      ),
+    )
+    .mockResolvedValueOnce(json({ shared: true, shareVersion: 1, sharedCaseId: 77 }))
+  await expect(api.sharePreview(12)).resolves.toMatchObject({ previewId: 901, previewVersion: 3 })
+  await expect(
+    api.approveShare(12, { expectedShareVersion: 0, previewId: 901, previewVersion: 3 }),
+  ).resolves.toMatchObject({ isShared: true, shareVersion: 1 })
+  const [previewUrl, previewInit] = vi.mocked(fetch).mock.calls[0]
+  const [shareUrl, shareInit] = vi.mocked(fetch).mock.calls[1]
+  expect(String(previewUrl)).toContain('/feedbacks/12/share-preview')
+  expect(previewInit?.method).toBe('POST')
+  expect(JSON.parse(String(previewInit?.body))).toEqual({})
+  expect(String(shareUrl)).toContain('/feedbacks/12/share')
+  expect(shareInit?.method).toBe('PATCH')
+  expect(JSON.parse(String(shareInit?.body))).toEqual({
+    shared: true,
+    expectedShareVersion: 0,
+    previewId: 901,
+    previewVersion: 3,
+  })
+})
 it('records an error-correction rework so only that type counts as the numerator', async () => {
   vi.mocked(fetch).mockResolvedValue(
     json({

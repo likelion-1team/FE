@@ -222,6 +222,19 @@ export interface FeedbackItem {
 export interface FeedbackList {
   days: { date: string; feedbacks: FeedbackItem[] }[]
 }
+export interface SharePreview {
+  previewId: Id
+  previewVersion: number
+  expiresAt: string
+  redactionStatus: string
+  content: {
+    title: string
+    type: string
+    problem: string
+    improvement: string
+    example: Example
+  }
+}
 export interface FeedbackDetail {
   itemId?: Id | null
   conversationVersionId: Id | null
