@@ -11,6 +11,7 @@ const required = [
   [emailCheckMethod, '/api/v1/auth/email-check'],
   ['post', '/api/v1/auth/refresh'],
   ['get', '/api/v1/teams'],
+  ['get', '/api/v1/conversation-versions/{conversationVersionId}'],
   ['get', '/api/v1/teams/{teamId}/dashboard/filter-options'],
   ['put', '/api/v1/teams/{teamId}/guides/{sharedCaseId}'],
   ['delete', '/api/v1/teams/{teamId}/guides/{sharedCaseId}'],
@@ -30,6 +31,8 @@ for (const [method, path] of required) {
 }
 for (const [name, fields] of [
   ['TeamSettingsResponse', ['version', 'taskType', 'policies']],
+  ['FeedbackDetailResponse', ['conversationVersionId']],
+  ['MyTeamResponse', ['capabilities']],
   ['TeamSettingsUpdateRequest', ['expectedVersion', 'taskType']],
   ['AnalysisStartRequest', ['settingsVersion', 'selections']],
   ['CandidateSelection', ['selectionId', 'taskTypeId']],

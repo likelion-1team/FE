@@ -29,14 +29,38 @@ import type {
   User,
 } from './types'
 
+function hasField(value: unknown, key: string): value is Record<string, unknown> {
+  return (
+    typeof value === 'object' && value !== null && Object.prototype.hasOwnProperty.call(value, key)
+  )
+}
+function release<T, U>(
+  value: unknown,
+  marker: string,
+  current: z.ZodType<T>,
+  legacy: z.ZodType<U>,
+): T | U {
+  return hasField(value, marker) ? current.parse(value) : legacy.parse(value)
+}
+function invalidResponse(message = '서버 응답 범위를 확인할 수 없습니다. 다시 시도해주세요.') {
+  return new ApiError(200, 'INVALID_RESPONSE', message)
+}
 async function allPages<T>(
   path: string,
   schema: z.ZodType<{ items: T[]; page: number; size: number; total: number }>,
   signal?: AbortSignal,
 ): Promise<T[]> {
   const result: T[] = []
+  let pageSize: number | undefined
   for (let page = 1; ; page++) {
-    const data = await request(`${path}?page=${page}&size=100`, { signal, validate: schema.parse })
+    const separator = path.includes('?') ? '&' : '?'
+    const data = await request(`${path}${separator}page=${page}&size=100`, {
+      signal,
+      validate: schema.parse,
+    })
+    if (data.page !== page || (pageSize != null && data.size !== pageSize))
+      throw invalidResponse('목록 페이지가 일치하지 않습니다. 다시 불러와주세요.')
+    pageSize = data.size
     result.push(...data.items)
     if (page * data.size >= data.total) return result
     if (!data.items.length || page >= 1000)
@@ -112,7 +136,11 @@ export const api = {
   options: async (id: string, signal?: AbortSignal, scope = 'ME'): Promise<FilterOptions> => {
     const raw = await request(`/teams/${id}/dashboard/filter-options?scope=${scope}`, {
       signal,
-      validate: live.options.or(schemas.optionsSchema).parse,
+      validate: (value) => {
+        const raw = release(value, 'scope', live.options, schemas.optionsSchema)
+        if ('scope' in raw && raw.scope !== scope) throw invalidResponse()
+        return raw
+      },
     })
     if (!('settingsVersions' in raw)) return raw
     const settings = await api.settings(id, signal)
@@ -129,14 +157,18 @@ export const api = {
     request<Kpis>(`/teams/${id}/dashboard/kpis${queryString(dashboardFilters(filters))}`, {
       signal,
       validate: (value) => {
-        const raw = live.kpis.or(schemas.kpisSchema).parse(value)
+        const raw = release(value, 'metrics', live.kpis, schemas.kpisSchema)
         if (!('metrics' in raw)) return raw
+        if (raw.scope !== filters.scope) throw invalidResponse()
+        const hidden = raw.metrics.some((m) => m.status === 'SUPPRESSED')
+        const coverage = hidden ? null : raw.coverage
         const find = (code: string) => {
           const m = raw.metrics.find((m) => m.code === code)
           if (!m) throw new Error('필수 지표 누락')
           return {
             ...m,
             value: m.status === 'AVAILABLE' ? m.value : null,
+            sampleSize: m.status === 'SUPPRESSED' ? null : m.sampleSize,
             estimated: m.valueSource === 'TOKENIZER_ESTIMATE',
           }
         }
@@ -146,8 +178,8 @@ export const api = {
           tokensPerSuccess: find('tokensPerConfirmedSuccess'),
           reworkRate: find('errorReworkRate'),
           successRate: find('confirmedSuccessRate'),
-          conversationCount: { value: raw.coverage?.inScopeCount ?? null },
-          cohortCoverage: raw.coverage,
+          conversationCount: { value: coverage?.inScopeCount ?? null },
+          cohortCoverage: coverage,
         }
       },
     }),
@@ -157,15 +189,16 @@ export const api = {
       {
         signal,
         validate: (value) => {
-          const raw = live.trends.or(schemas.trendsSchema).parse(value)
+          const raw = release(value, 'scope', live.trends, schemas.trendsSchema)
           if (!('scope' in raw)) return raw
+          if (raw.scope !== filters.scope) throw invalidResponse()
           return {
             metric: filters.metric,
             estimated: filters.metric === 'tokensPerSuccess',
             points: raw.points.map((p) => ({
               date: p.periodStart,
               value: p.metric.status === 'AVAILABLE' ? p.metric.value : null,
-              conversationCount: p.metric.sampleSize,
+              conversationCount: p.metric.status === 'SUPPRESSED' ? null : p.metric.sampleSize,
               status: p.metric.status,
               insufficientSample: p.metric.status !== 'AVAILABLE',
             })),
@@ -181,7 +214,7 @@ export const api = {
       method: 'POST',
       body,
       timeoutMs: 90000,
-      validate: live.upload.or(schemas.uploadSchema).parse,
+      validate: (value) => release(value, 'status', live.upload, schemas.uploadSchema),
     })
   },
   candidates: (id: Id, page: number, search: string, signal?: AbortSignal) =>
@@ -215,7 +248,7 @@ export const api = {
     request<AnalysisStatus>(`/uploads/${id}`, {
       signal,
       validate: (value) => {
-        const raw = live.uploadStatus.or(schemas.analysisStatusSchema).parse(value)
+        const raw = release(value, 'uploadId', live.uploadStatus, schemas.analysisStatusSchema)
         return 'uploadId' in raw ? { ...raw, progress: 0 } : raw
       },
     }),
@@ -223,7 +256,7 @@ export const api = {
     request<UploadHistory>(`/teams/${id}/uploads?page=${page + 1}&size=10`, {
       signal,
       validate: (value) => {
-        const raw = live.history.or(schemas.historySchema).parse(value)
+        const raw = release(value, 'items', live.history, schemas.historySchema)
         return 'items' in raw
           ? {
               content: raw.items.map((x) => ({
@@ -247,7 +280,7 @@ export const api = {
       {
         signal,
         validate: (value) => {
-          const raw = live.feedbacks.or(schemas.feedbackListSchema).parse(value)
+          const raw = release(value, 'items', live.feedbacks, schemas.feedbackListSchema)
           return 'items' in raw
             ? {
                 days: raw.items.map((x) => ({
@@ -265,10 +298,16 @@ export const api = {
     request<FeedbackDetail>(`/feedbacks/${id}`, {
       signal,
       validate: (value) => {
-        const raw = live.feedback.or(schemas.feedbackSchema).parse(value)
+        const raw = release(value, 'conversationId', live.feedback, schemas.feedbackSchema)
         return 'conversationId' in raw
-          ? { ...raw, evidences: [{ conversationId: raw.conversationId, turnIndexes: [] }] }
-          : raw
+          ? {
+              ...raw,
+              evidences:
+                raw.conversationVersionId == null
+                  ? []
+                  : [{ conversationVersionId: raw.conversationVersionId, turnIndexes: [] }],
+            }
+          : { ...raw, conversationVersionId: null, evidences: [] }
       },
     }),
   reaction: (id: Id, reaction: Reaction | null, reason?: string) =>
@@ -283,58 +322,92 @@ export const api = {
       method: 'PATCH',
       json: { shared: false, expectedShareVersion },
       validate: (value) => {
-        const raw = live.share.or(schemas.shareSchema).parse(value)
+        const raw = release(value, 'shared', live.share, schemas.shareSchema)
         return 'shared' in raw ? { isShared: raw.shared } : raw
       },
     }),
-  conversation: (id: Id, feedbackId: string, signal?: AbortSignal) =>
-    request<Conversation>(`/conversations/${id}?highlightFeedbackId=${feedbackId}`, {
-      signal,
-      validate: (value) => {
-        const raw = live.conversation.or(schemas.conversationSchema).parse(value)
-        return 'highlightMessageIds' in raw
-          ? {
-              title: raw.title,
-              startedAt: raw.startedAt,
-              model: '',
-              messages: raw.messages.map((m, i) => ({ ...m, idx: i })),
-              highlightIndexes: raw.messages.flatMap((m, i) =>
-                raw.highlightMessageIds.includes(m.messageId) ? [i] : [],
-              ),
-            }
-          : raw
+  conversationVersion: (id: Id, feedbackId: string, signal?: AbortSignal) =>
+    request<Conversation>(
+      `/conversation-versions/${encodeURIComponent(String(id))}${queryString({ highlightFeedbackId: feedbackId })}`,
+      {
+        signal,
+        validate: (value) => {
+          const raw = release(
+            value,
+            'highlightMessageIds',
+            live.conversation,
+            schemas.conversationSchema,
+          )
+          if (!('highlightMessageIds' in raw) || String(raw.conversationVersionId) !== String(id))
+            throw invalidResponse()
+          return 'highlightMessageIds' in raw
+            ? {
+                title: raw.title,
+                startedAt: raw.startedAt,
+                model: '',
+                messages: raw.messages.map((m, i) => ({ ...m, idx: i })),
+                highlightIndexes: raw.messages.flatMap((m, i) =>
+                  raw.highlightMessageIds.includes(m.messageId) ? [i] : [],
+                ),
+              }
+            : raw
+        },
       },
-    }),
-  sharedCases: (id: string, type: string, signal?: AbortSignal) =>
-    request<{ items: SharedCase[] }>(`/teams/${id}/shared-cases${queryString({ type })}`, {
+    ),
+  sharedCases: async (
+    id: string,
+    type: string,
+    signal?: AbortSignal,
+  ): Promise<{ items: SharedCase[] }> => {
+    const legacy = schemas.sharedCasesSchema.transform((raw) => ({
+      ...raw,
+      page: 1,
+      size: Math.max(1, raw.items.length),
+      total: raw.items.length,
+    }))
+    const schema = z.unknown().transform((value) => release(value, 'page', live.shared, legacy))
+    const items = await allPages<z.infer<typeof schema>['items'][number]>(
+      `/teams/${id}/shared-cases${queryString({ type })}`,
+      schema,
       signal,
-      validate: (value) => {
-        const raw = live.shared.or(schemas.sharedCasesSchema).parse(value)
-        return {
-          items: raw.items.map((x) =>
-            'sharedCaseId' in x
-              ? { ...x, feedbackId: x.sharedCaseId, taskType: String(x.taskTypeId) }
-              : x,
-          ),
-        }
-      },
-    }),
-  guides: (id: string, type: string, signal?: AbortSignal) =>
-    request<Guides>(`/teams/${id}/guides${queryString({ type })}`, {
+    )
+    return {
+      items: items.map((x) =>
+        'sharedCaseId' in x
+          ? { ...x, feedbackId: x.sharedCaseId, taskType: String(x.taskTypeId) }
+          : x,
+      ),
+    }
+  },
+  guides: async (id: string, type: string, signal?: AbortSignal): Promise<Guides> => {
+    const legacy = schemas.guidesSchema.transform((raw) => {
+      const items = raw.groups.flatMap((group) =>
+        group.guides.map((item) => ({ ...item, type: group.type })),
+      )
+      return { items, page: 1, size: Math.max(1, items.length), total: items.length }
+    })
+    const schema = z.unknown().transform((value) => release(value, 'page', live.shared, legacy))
+    const items = await allPages<z.infer<typeof schema>['items'][number]>(
+      `/teams/${id}/guides${queryString({ type })}`,
+      schema,
       signal,
-      validate: (value) => {
-        const raw = live.shared.or(schemas.guidesSchema).parse(value)
-        return 'items' in raw
-          ? {
-              groups: raw.items.map((x) => ({
-                type: x.type,
-                guides: [{ ...x, feedbackId: x.sharedCaseId, guideAddedAt: '' }],
-              })),
-            }
-          : raw
-      },
-    }),
-  guide: (id: Id, enabled: boolean, teamId?: string, shareVersion?: number) =>
+    )
+    const groups: Guides['groups'] = []
+    for (const item of items) {
+      let group = groups.find((g) => g.type === item.type)
+      if (!group) {
+        group = { type: item.type, guides: [] }
+        groups.push(group)
+      }
+      group.guides.push(
+        'sharedCaseId' in item
+          ? { ...item, feedbackId: item.sharedCaseId, guideAddedAt: '' }
+          : item,
+      )
+    }
+    return { groups }
+  },
+  guide: (id: Id, enabled: boolean, teamId: string, shareVersion: number) =>
     request(`/teams/${teamId}/guides/${id}`, {
       method: enabled ? 'PUT' : 'DELETE',
       ...(enabled ? { json: { expectedShareVersion: shareVersion } } : {}),
