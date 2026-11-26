@@ -1,3 +1,4 @@
+/* global document */
 import { spawnSync } from 'node:child_process'
 import { mkdtemp, readFile, rename, rm, rmdir } from 'node:fs/promises'
 import path from 'node:path'
@@ -17,8 +18,19 @@ if (viewport?.width !== 1600 || viewport?.height !== 900) {
   throw new Error('The presentation overlays require a 1600 by 900 recording.')
 }
 
-const logo = await readFile(new URL('../src/assets/brand/toki-logo.png', import.meta.url))
+const [logo, mascotImage, font] = await Promise.all([
+  readFile(new URL('../src/assets/brand/toki-logo.png', import.meta.url)),
+  readFile(new URL('../src/assets/brand/toki-mascot.png', import.meta.url)),
+  readFile(
+    new URL(
+      import.meta
+        .resolve('@fontsource/ibm-plex-sans-kr/files/ibm-plex-sans-kr-latin-600-normal.woff2'),
+    ),
+  ),
+])
 const logoUrl = `data:image/png;base64,${logo.toString('base64')}`
+const mascotUrl = `data:image/png;base64,${mascotImage.toString('base64')}`
+const fontUrl = `data:font/woff2;base64,${font.toString('base64')}`
 const temp = await mkdtemp(path.join(output, '.export-'))
 const card = path.join(temp, 'card.png')
 const mascot = path.join(temp, 'mascot.png')
@@ -31,12 +43,17 @@ try {
     const page = await browser.newPage({ viewport })
     await page.setContent(`
       <style>
+        @font-face {
+          font-family: "IBM Plex Sans KR"; font-weight: 600;
+          src: url("${fontUrl}") format("woff2");
+        }
+        [hidden] { display: none !important; }
         body { margin: 0; }
         #card {
           width: 1600px; height: 777px; box-sizing: border-box; text-align: center;
           padding-top: 146px; border-bottom: 1px solid #d6e3f2;
           background: linear-gradient(#fcfdff, #e2ecf8); color: #223654;
-          font: 600 40px "Segoe UI", Arial, sans-serif;
+          font: 600 40px "IBM Plex Sans KR", sans-serif;
         }
         #card img { display: block; width: 865px; margin: 0 auto; }
         #card p { margin: 54px 0 0; }
@@ -45,19 +62,21 @@ try {
           display: grid; place-items: center; border-radius: 50%;
           background: #ffffffed; box-shadow: inset 0 0 0 1px #c9d9ec;
         }
-        #mascot span { display: block; width: 91px; height: 86px; overflow: hidden; }
-        #mascot img { width: 212px; display: block; }
+        #mascot img { width: 100px; display: block; }
       </style>
       <section id="card">
         <img src="${logoUrl}" alt="TOKI" />
-        <p>Make Every Token Count</p>
+        <p>Make Every Token Count.</p>
       </section>
-      <div id="mascot" hidden><span><img src="${logoUrl}" alt="TOKI 캐릭터" /></span></div>
+      <div id="mascot" hidden><img src="${mascotUrl}" alt="TOKI 캐릭터" /></div>
     `)
     const cardLayer = page.locator('#card')
     const mascotLayer = page.locator('#mascot')
-    // The mascot is the leftmost 860 of 2006 columns in the original logo.
-    await page.addStyleTag({ content: '[hidden] { display: none !important; }' })
+    const fontLoaded = await page.evaluate(async () => {
+      const faces = await document.fonts.load('600 40px "IBM Plex Sans KR"')
+      return faces.some((face) => face.status === 'loaded')
+    })
+    if (!fontLoaded) throw new Error('The title card font could not be loaded.')
     await cardLayer.screenshot({ path: card, omitBackground: true })
     await cardLayer.evaluate((element) => element.setAttribute('hidden', ''))
     await mascotLayer.evaluate((element) => element.removeAttribute('hidden'))

@@ -114,7 +114,7 @@ await page.getByRole('region', { name: '근거 대화' }).scrollIntoViewIfNeeded
 await caption(
   47,
   '06 / 근거 확인',
-  '문제가 된 실제 대화 위치를 확인하고, 도움이 된 피드백에 반응을 남깁니다.',
+  '샘플 대화에서 개선점이 나온 위치를 확인하고, 도움이 된 피드백에 반응을 남깁니다.',
 )
 await at(52)
 await click(button('도움됨'))
