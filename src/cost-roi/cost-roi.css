@@ -1,0 +1,72 @@
+.cost-roi {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.cost-roi .card {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+}
+.roi-disclosure {
+  padding: 16px 20px;
+  background: var(--soft);
+  border-radius: var(--radius);
+  margin: 0;
+}
+.roi-tabs {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.roi-tabs .button.primary[aria-pressed='true'] {
+  background: var(--primary);
+  color: var(--surface);
+}
+.roi-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+}
+.roi-two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 20px;
+}
+.roi-metric h2 {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.roi-metric .roi-value {
+  font-size: 30px;
+  line-height: 1.5;
+  font-weight: 600;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.roi-metric small {
+  color: var(--muted);
+}
+.roi-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.roi-check input {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+.roi-result-note {
+  margin-bottom: 0;
+}
+.cost-roi details p {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 900px) {
+  .roi-grid,
+  .roi-two {
+    grid-template-columns: 1fr;
+  }
+}

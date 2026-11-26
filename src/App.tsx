@@ -8,6 +8,7 @@ import { UploadPage, HistoryPage } from './pages/UploadPage'
 import { FeedbackPage, FeedbackDetailPage } from './pages/FeedbackPage'
 import { GuidesPage, SharedCasesPage } from './pages/GuidesPage'
 import { Empty } from './components/ui'
+import { CostRoiPage } from './pages/CostRoiPage'
 
 export default function App() {
   return (
@@ -26,6 +27,7 @@ export default function App() {
           <Route path="feedbacks" element={<FeedbackPage />} />
           <Route path="feedbacks/:feedbackId" element={<FeedbackDetailPage />} />
           <Route path="guides" element={<GuidesPage />} />
+          <Route path="cost-roi" element={<CostRoiPage />} />
           <Route path="shared" element={<SharedCasesPage />} />
         </Route>
       </Route>

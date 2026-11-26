@@ -105,6 +105,7 @@ export function Workspace() {
     ['history', '분석 이력'],
     ['feedbacks', '내 피드백'],
     ['guides', '개선 가이드'],
+    ['cost-roi', '비용 · ROI 시나리오'],
     ['settings', leader ? '팀 설정' : '분석 대상 · 기준'],
     ...(leader && team.capabilities?.canManageSharedCases === true
       ? [['shared', '공유 사례']]

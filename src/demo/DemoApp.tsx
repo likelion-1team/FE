@@ -2,15 +2,17 @@ import { useEffect, useRef, useState } from 'react'
 import { Button, Card, Field, Modal, Notice } from '../components/ui'
 import { cases, completedIds, demoFile, teamSample, type DemoCaseId, type Scenario } from './data'
 import './demo.css'
+import { CostRoi } from '../cost-roi/CostRoi'
 import { BrandLogo } from '../components/BrandLogo'
 
-type Screen = 'upload' | 'analysis' | 'feedback' | 'team' | 'guides'
+type Screen = 'upload' | 'analysis' | 'feedback' | 'team' | 'guides' | 'cost'
 const screens: [Screen, string][] = [
   ['upload', '1. 대화 업로드'],
   ['analysis', '2. 분석 진행'],
   ['feedback', '3. 내 피드백'],
   ['team', '4. 팀 성과'],
   ['guides', '5. 개선 가이드'],
+  ['cost', '6. 비용 · ROI'],
 ]
 
 export default function DemoApp() {
@@ -150,6 +152,7 @@ export default function DemoApp() {
           <h1 ref={heading} tabIndex={-1}>
             {screens.find(([id]) => screen === id)?.[1].slice(3)}
           </h1>
+          {screen === 'cost' && <CostRoi demo />}
           {screen === 'upload' && (
             <>
               <Card>
