@@ -7,6 +7,11 @@
   background: var(--soft);
   flex-wrap: wrap;
 }
+.demo-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
 .demo-badge {
   padding: 4px 10px;
   border-radius: 6px;

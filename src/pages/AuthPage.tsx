@@ -3,6 +3,7 @@ import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth'
 import { api } from '../api/service'
 import { Button, ErrorMessage, Field, Loading, Notice } from '../components/ui'
+import { BrandLogo } from '../components/BrandLogo'
 
 export function AuthPage({ signup = false }: { signup?: boolean }) {
   const { user, loading, login, logout, logoutState } = useAuth()
@@ -62,7 +63,10 @@ export function AuthPage({ signup = false }: { signup?: boolean }) {
   return (
     <div className="auth-layout">
       <aside className="auth-brand">
-        <strong>AI 업무 온보딩</strong>
+        <div className="auth-logo">
+          <BrandLogo full />
+          <p className="auth-tagline">Make Every Token Count.</p>
+        </div>
         <h1>
           더 나은 AI 활용을
           <br />

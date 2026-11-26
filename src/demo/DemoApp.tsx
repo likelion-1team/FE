@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Button, Card, Field, Modal, Notice } from '../components/ui'
 import { cases, completedIds, demoFile, teamSample, type DemoCaseId, type Scenario } from './data'
 import './demo.css'
+import { BrandLogo } from '../components/BrandLogo'
 
 type Screen = 'upload' | 'analysis' | 'feedback' | 'team' | 'guides'
 const screens: [Screen, string][] = [
@@ -110,9 +111,10 @@ export default function DemoApp() {
         본문으로 이동
       </a>
       <header className="demo-header">
-        <strong>
-          AI 업무 온보딩 <span className="demo-badge">DEMO</span>
-        </strong>
+        <div className="demo-brand">
+          <BrandLogo />
+          <span className="demo-badge">DEMO</span>
+        </div>
         <div className="demo-actions">
           <label>
             시연 역할{' '}

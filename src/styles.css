@@ -242,6 +242,10 @@ input[type='checkbox'] {
   z-index: 10;
 }
 .brand {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  min-height: 44px;
   font-size: 18px;
   font-weight: 700;
   background: none;
@@ -249,6 +253,16 @@ input[type='checkbox'] {
   color: var(--text);
   padding: 0;
   white-space: nowrap;
+}
+.brand-logo {
+  display: block;
+  width: 96px;
+  height: auto;
+  object-fit: contain;
+}
+.brand-logo-full {
+  width: 320px;
+  max-width: 100%;
 }
 .topbar-actions {
   margin-left: auto;
@@ -344,15 +358,23 @@ input[type='checkbox'] {
 }
 .auth-brand {
   padding: 150px 64px 64px;
-  background: var(--primary);
-  color: white;
+  background: var(--bg);
+  color: #1c2e52;
   display: flex;
   flex-direction: column;
   gap: 40px;
   align-items: start;
 }
-.auth-brand > strong {
+.auth-logo {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 100%;
+}
+.auth-logo .auth-tagline {
   font-size: 20px;
+  font-weight: 600;
+  line-height: 1.4;
 }
 .auth-brand h1 {
   font-size: 36px;
@@ -363,7 +385,7 @@ input[type='checkbox'] {
   font-size: 18px;
 }
 .auth-brand small {
-  color: #e4edf7;
+  color: var(--muted);
 }
 .auth-main {
   padding: 150px 80px 60px;
@@ -810,6 +832,13 @@ td {
   .auth-brand p,
   .auth-brand small {
     display: none;
+  }
+  .auth-logo .brand-logo-full {
+    width: 240px;
+  }
+  .auth-logo .auth-tagline {
+    display: block;
+    font-size: 16px;
   }
   .auth-main {
     padding: 36px 24px;

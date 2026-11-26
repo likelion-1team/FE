@@ -6,6 +6,7 @@ import { api } from '../api/service'
 import type { Team } from '../api/types'
 import { Button, ErrorState, Loading, Modal } from './ui'
 import { WorkflowSteps } from './WorkflowSteps'
+import { BrandLogo } from './BrandLogo'
 
 const Context = createContext<{ team: Team; teamId: string; leader: boolean; base: string } | null>(
   null,
@@ -74,8 +75,8 @@ export function Topbar({ team }: { team?: Team }) {
 function LinkBrand() {
   const navigate = useNavigate()
   return (
-    <button className="brand" onClick={() => navigate('/teams')}>
-      AI 업무 온보딩
+    <button className="brand" aria-label="TOKI · 내 팀 목록" onClick={() => navigate('/teams')}>
+      <BrandLogo />
     </button>
   )
 }
