@@ -264,6 +264,9 @@ input[type='checkbox'] {
   width: 320px;
   max-width: 100%;
 }
+.topbar .brand-logo-full {
+  width: 144px;
+}
 .topbar-actions {
   margin-left: auto;
   display: flex;

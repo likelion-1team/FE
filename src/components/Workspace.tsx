@@ -76,7 +76,7 @@ function LinkBrand() {
   const navigate = useNavigate()
   return (
     <button className="brand" aria-label="TOKI · 내 팀 목록" onClick={() => navigate('/teams')}>
-      <BrandLogo />
+      <BrandLogo full />
     </button>
   )
 }
