@@ -1,0 +1,101 @@
+.prompt-comparison {
+  display: grid;
+  gap: 24px;
+}
+
+.prompt-form {
+  display: grid;
+  gap: 12px;
+}
+
+.prompt-form fieldset,
+.prompt-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.prompt-form fieldset {
+  min-width: 0;
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.prompt-task {
+  grid-column: 1 / -1;
+}
+
+.prompt-form textarea {
+  resize: vertical;
+}
+
+.prompt-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+
+.prompt-delta {
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.prompt-results h2 {
+  scroll-margin-top: 140px;
+}
+
+.prompt-token-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.prompt-token-table :is(th, td) {
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--border);
+  text-align: end;
+}
+
+.prompt-token-table th:first-child {
+  text-align: start;
+}
+
+.prompt-token-table tbody th {
+  font-weight: 500;
+}
+
+.prompt-token-table tbody tr:last-child {
+  background: var(--soft);
+  font-weight: 600;
+}
+
+.prompt-output {
+  min-width: 0;
+  padding: 16px;
+  background: var(--soft);
+  border-radius: var(--radius);
+}
+
+.prompt-response {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.prompt-provider-ids dl {
+  display: grid;
+  gap: 12px;
+}
+
+.prompt-provider-ids dd {
+  margin-inline-start: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 720px) {
+  .prompt-form fieldset,
+  .prompt-pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
